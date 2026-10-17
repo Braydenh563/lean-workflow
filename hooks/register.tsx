@@ -15,8 +15,14 @@ const AUTOPILOT = [
   '- Run the lean-setup skill once per repo, only when CLAUDE.md neither has a "Lean workflow" section nor names the lean-workflow plugin, and no retro ledger exists. A repo that already carries the workflow is never set up again.',
   '- Route by rungs: haiku (scout) for lookup and mechanical work, sonnet for implementation, opus for design and risky review. Every Agent call names a model. Fable only when the user names it for that task.',
   '- When the user\'s ask is done and pushed, or a plugin note says context is high, update the handover state, run the retro skill, and tell the user to start a fresh session.',
+  '- If scripts/orient.sh exists, run it first in a session. If scripts/gate.sh exists, run it before every push. If docs/CODEMAP.md exists, grep it before opening source files.',
+  '- Agents keep a remaining-work file and commit at least every 20 minutes. Tests take a fixed "now" instead of reading the clock. A claim about how a UI looks needs a measurement from the running app.',
   '- Batch independent tool calls; grep then read line ranges; one retry per new hypothesis.',
 ].join('\n')
+// Files that ride in every session's context: a size limit keeps them lean.
+const DEFAULT_CLAUDE_MD_MAX = 200
+const DEFAULT_NOW_MAX = 60
+const INBOX_MAX = 20
 const REPEAT_LIMIT = 3
 // Only tools whose identical repeat means a stuck loop; inbox and status reads repeat by design.
 const LOOP_TOOLS = new Set(['Bash', 'Read', 'Grep', 'Glob', 'Edit', 'Write', 'WebFetch', 'WebSearch'])
@@ -59,6 +65,21 @@ function advice(s: Stats, costs: Record<string, ModelCost>): string {
   return 'No waste signal yet. Run the retro skill at session end.'
 }
 
+// The note to show when CLAUDE.md or now.md is read whole (or written) past its limit, or the inbox passes 20 items.
+function sizeNote(plugin: string, path: string, text: string, claudeMax: number, nowMax: number): string | undefined {
+  const lines = text.split('\n').length
+  if (/(^|\/)CLAUDE\.md$/.test(path) && lines > claudeMax) {
+    return `${plugin}: CLAUDE.md is ${lines} lines (limit ${claudeMax}) and rides in every turn. Move detail into a doc it links to; keep rules, not history.`
+  }
+  if (/(^|\/)\.claude\/now\.md$/.test(path)) {
+    if (lines > nowMax) return `${plugin}: now.md is ${lines} lines (limit ${nowMax}). Fold finished work into the retro ledger or commit messages and keep only what the next session needs.`
+    const inbox = text.split(/^## /m).find(b => /^Inbox/i.test(b))
+    const items = inbox ? inbox.split('\n').filter(l => /^\s*(\d+[.)]|-)\s+\S/.test(l)).length : 0
+    if (items >= INBOX_MAX) return `${plugin}: the now.md inbox holds ${items} items (limit under ${INBOX_MAX}). Triage it now: fix, place in a plan, or drop each one.`
+  }
+  return undefined
+}
+
 type Store = { store: { get: (k: string) => Promise<unknown>; set: (k: string, v: unknown) => Promise<void> } }
 
 // Usage across sessions, so /prune can name plugins that never earn their context.
@@ -76,7 +97,11 @@ async function trend($: { store: { get: (k: string) => Promise<unknown> } }, s: 
 }
 
 export const register: Register = (on, options) => {
-  const grepOnly = new RegExp(String((options as { grepOnly?: string }).grepOnly || DEFAULT_GREP_ONLY))
+  const opts = options as { grepOnly?: string; claudeMdMaxLines?: number | string; nowMaxLines?: number | string }
+  const grepOnly = new RegExp(String(opts.grepOnly || DEFAULT_GREP_ONLY))
+  const claudeMax = Number(opts.claudeMdMaxLines) || DEFAULT_CLAUDE_MD_MAX
+  const nowMax = Number(opts.nowMaxLines) || DEFAULT_NOW_MAX
+  const sizeWarned = new Set<string>()
   let ctxNoted = false
   // A turn's usage sums every model request in it; each main-thread tool call adds one.
   let turnCalls = 0
@@ -258,6 +283,16 @@ export const register: Register = (on, options) => {
     if (size > BIG_OUTPUT && !bigOutputs.has(e.tool)) {
       bigOutputs.add(e.tool)
       notes.push(`${$.plugin.name}: that ${e.tool} result was ${Math.round(size / 1000)}k characters and now rides in context every turn. Narrow the next one (head, grep, a line range).`)
+    }
+    // A whole-file read or a write is the only moment the full text is visible here.
+    const target = e as unknown as { file_path?: string; limit?: number; content?: string }
+    const seen = e.tool === 'Read' && target.limit === undefined ? ran.text : e.tool === 'Write' ? target.content : undefined
+    if (target.file_path && typeof seen === 'string' && ran.deny === undefined) {
+      const note = sizeNote($.plugin.name, target.file_path, seen, claudeMax, nowMax)
+      if (note && !sizeWarned.has(note.split(' ')[1] + e.tool)) {
+        sizeWarned.add(note.split(' ')[1] + e.tool)
+        notes.push(note)
+      }
     }
     if (s.ctx > BIG_CONTEXT && !ctxNoted) {
       ctxNoted = true

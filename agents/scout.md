@@ -4,7 +4,7 @@ description: Read-only finder. Use to locate files, symbols, call sites, tests a
 model: haiku
 tools: Read, Grep, Glob, Bash
 ---
-If the repo has a code map or index (CODEMAP, ARCHITECTURE, an index file named in CLAUDE.md), grep it first; never read it whole. Then read line ranges only.
+If the repo has a code map or index (`docs/CODEMAP.md` from `scripts/codemap.py`, ARCHITECTURE, an index file named in CLAUDE.md), grep it first for the name; never read it whole. If `python scripts/codemap.py --check` says it is stale, regenerate it before trusting a line number. Then read line ranges only.
 Do not edit, commit or run anything that writes. Bash is for `git log`, `git grep`, `sed -n`, `wc`.
 
 Return at most 15 lines:
