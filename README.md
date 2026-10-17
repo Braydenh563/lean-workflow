@@ -55,7 +55,7 @@ files below. A repo that already has the workflow is left alone.
 
 ### Warnings
 
-- Context per turn in the status line; a note to the model once it passes 150k.
+- Live context window and your 5-hour and weekly limits in the status line (from the host, not estimated); a note to the model once context passes 150k.
 - Any tool result over 20,000 characters, since it rides in context on every later turn.
 - `CLAUDE.md` over 200 lines, `.claude/now.md` over 60 lines or at 20 inbox items.
 
@@ -71,7 +71,7 @@ Seven habits are watched. Each nudge shows **once per session** (at most two per
 | Big paste | A prompt over 20,000 characters | Save to a file, grep it, read a line range |
 | Images | 2 or more images, or one over 1 MB | Crop to the problem, or state the numbers |
 | Idle gap | 55 minutes since the last turn (the prompt cache has likely expired) | Fresh session from the handover |
-| Weekly limit | The `seven_day` window is 75% used, or 50% used and 20 points ahead of an even burn | Cheaper rungs; big runs wait for the reset |
+| Weekly limit | The `seven_day` window is 70% used, or 50% used and 20 points ahead of an even burn | Cheaper rungs; big runs wait for the reset |
 
 `/coach` reports each habit's count this session and in your stored sessions (the last 30), and the trend: the older half of those sessions against the newer half, once there are four. Nudges only advise; the one denial remains the unnamed-agent guard. The coach never suggests Fable.
 

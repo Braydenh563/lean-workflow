@@ -20,7 +20,7 @@ export const LIMITS = {
   imageBytes: 1024 * 1024,
   imageCount: 2,
   idleMs: 55 * 60 * 1000,
-  weeklyPct: 75,
+  weeklyPct: 70,
   weeklyAhead: 20,
 }
 const FRESH_CTX = 20_000 // what a fresh session starts with once the handover is read
