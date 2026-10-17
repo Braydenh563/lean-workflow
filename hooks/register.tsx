@@ -5,6 +5,7 @@ import type { AgentRow, ModelCost, SessionSummary, Stats, TaskRow } from '../typ
 import { agentModel, bigImage, bigPaste, branchInfo, coachReport, fanOut, idleGap, longPr, longSession, makeCoach, parseOff, reread, weeklyLimit, W } from './coach'
 import type { CoachRow } from './coach'
 import { dashText, k } from './format'
+import { inboxCount, parseOrder, planCounts, progressText } from './progress'
 
 const DEFAULT_GREP_ONLY = '(^|/)(CODEMAP\\.md|HISTORY\\.md|CHANGELOG\\.md|package-lock\\.json|yarn\\.lock|pnpm-lock\\.yaml|poetry\\.lock|Cargo\\.lock)$|\\.min\\.js$|\\.map$'
 // Agents that pin their own model; anything else must name one (the rungs).
@@ -23,6 +24,7 @@ const AUTOPILOT = [
   '- Agents keep a remaining-work file and commit at least every 20 minutes. Tests take a fixed "now" instead of reading the clock. A claim about how a UI looks needs a measurement from the running app.',
   '- Batch independent tool calls; grep then read line ranges; one retry per new hypothesis.',
   '- When the user says they are going to sleep, to work, out or away, or asks for work while they are gone, run the away skill: work the queue unattended, never stop to ask, stop before the limits, leave a summary.',
+  '- Work orders: "ship" (drive this PR green: conflicts, CI, CodeQL, review threads, bugs, then merge) or "continue" (keep developing, fast and lean, with rotating bug, security, architecture, UX, WCAG and overflow scans) runs the work skill (also /work ship|continue|stop), which writes .claude/work-order.md; a Stop hook then keeps the run going until its checklist is done or a stop rule is met. /progress shows where it is.',
 ].join('\n')
 // Files that ride in every session's context: a size limit keeps them lean.
 const DEFAULT_CLAUDE_MD_MAX = 200
@@ -99,6 +101,39 @@ async function trend($: { store: { get: (k: string) => Promise<unknown> } }, s: 
   return `trend: context ${k(s.ctx)} vs your median ${k(med)} over ${history.length} sessions`
 }
 
+type Run = (argv: string[]) => Promise<{ exitCode: number; stdout: string }>
+
+async function sh(run: Run, argv: string[]): Promise<string> {
+  const r = await run(argv).catch(() => undefined)
+  return r && r.exitCode === 0 ? r.stdout : ''
+}
+
+type ProgressHost = Parameters<typeof read>[0] & { clock: { now: () => Promise<number> }; process: { run: Run } }
+
+async function progress($: ProgressHost): Promise<string> {
+  const run: Run = argv => $.process.run(argv)
+  const tasks = await read($, tasksA)
+  const agents = await read($, agentsA)
+  const s = await read($, statsA)
+  const order = parseOrder(await sh(run, ['cat', '.claude/work-order.md']))
+  const box = (re: string) => sh(run, ['git', 'grep', '-c', '-E', re, '--', '*.md'])
+  const plans = planCounts(await box('^\\s*[-*] \\[ \\]'), await box('^\\s*[-*] \\[[xX]\\]'))
+  let inbox: { file: string; items: number } | undefined
+  for (const file of ['docs/roadmap/INBOX.md', 'INBOX.md', 'docs/INBOX.md', '.claude/now.md']) {
+    const text = await sh(run, ['cat', file])
+    if (text) {
+      inbox = { file, items: inboxCount(text, !file.endsWith('now.md')) }
+      break
+    }
+  }
+  const continues = Number((await sh(run, ['cat', '.claude/work-order.count'])).trim()) || undefined
+  return progressText({
+    order, plans, inbox, continues, turns: s.turns,
+    tasks: { done: tasks.filter(t => t.status === 'completed').length, total: tasks.length },
+    agents: { running: agents.filter(a => a.endedAt === undefined).length, total: agents.length },
+  })
+}
+
 export const register: Register = (on, options) => {
   const opts = options as { coachOff?: string; grepOnly?: string; claudeMdMaxLines?: number | string; nowMaxLines?: number | string }
   const grepOnly = new RegExp(String(opts.grepOnly || DEFAULT_GREP_ONLY))
@@ -124,6 +159,7 @@ export const register: Register = (on, options) => {
     await $.command.register({ name: 'spend', description: "This session's cost split and the best next step to cut it" })
     await $.command.register({ name: 'prune', description: 'Plugins and skills you never use, from the sessions recorded so far' })
     await $.command.register({ name: 'coach', description: 'Habit counts and the trend from your stored sessions' })
+    await $.command.register({ name: 'progress', description: 'Work order, tasks, agents, plan checklists and the inbox, as bars' })
     await $.command.register({ name: 'dash', description: 'Open the usage dashboard: agents, tasks, cost by model, efficiency' })
     return next(e)
   }).catch(($, e, next) => next(e))
@@ -147,9 +183,11 @@ export const register: Register = (on, options) => {
         advice: advice(s, costs),
         trend: await trend($, s),
         bigContext: BIG_CONTEXT,
-      }),
+      }) + '\n\n' + (await progress($)),
     }
   })
+
+  on('command.run', { command: 'progress' }, async $ => ({ text: await progress($) }))
 
   on('command.run', { command: 'spend' }, async $ => {
     const s = await read($, statsA)

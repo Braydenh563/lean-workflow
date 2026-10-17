@@ -19,6 +19,9 @@ rules, record the choice, and carry on. Stop only on the conditions below.
    one optional line to paste for a hard stop:
    `/goal queue in the handover is done, or the weekly limit passes 85%, or 8 hours`.
    Then start.
+4. Write a `continue` work order (work skill) from the queue, so the
+   plugin's Stop hook keeps the run going after each item instead of ending
+   the turn; for "ship it before I wake up", write a `ship` order.
 
 ## The work loop (per item)
 
