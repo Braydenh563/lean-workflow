@@ -191,6 +191,8 @@ claude plugin validate .   # manifest
 python -m pytest tests     # template tests, in a scratch repo
 ```
 
+Releases: raise `version` in `.claude-plugin/plugin.json` (and the README badge) in the PR. When it merges to main, the `Tag release` workflow runs `scripts/tag.sh --push`, which tags the commit that set the version as `lean-workflow--vX.Y.Z` (annotated; an existing tag is never moved). By hand: `scripts/tag.sh --push`, or `scripts/tag.sh --all --push` to backfill every earlier version found in the history. A GitHub release page is still yours to create from the tag.
+
 Layout: `hooks/` (guards and commands in `register.tsx`; pure rules in `coach.ts`, `tier.ts`, `modes.ts`, `guards.ts`, `briefing.ts`, `progress.ts`; formatting in `format.ts`), `skills/` (`lean-setup` with `templates/`, `retro`, `upgrade-scan`, `work`, `away`, and the modes `focus`, `triage`, `review`, `budget`, `release`), `scripts/` (`keep-going.sh`, `item_ledger.py`), `agents/`, `.claude-plugin/` (manifests).
 
 ## Licence

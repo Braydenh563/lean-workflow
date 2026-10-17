@@ -28,7 +28,8 @@ in this mode, and never in an unattended run.
    a gap.
 6. **Review.** A fresh `reviewer` on `git diff <tag>..HEAD` with the changelog
    as the acceptance criteria. Fix what it confirms, then re-run step 2.
-7. **Commit and tag locally.** `git commit -m "Release vX.Y.Z"` and
+7. **Commit and tag locally.** (A repo with `scripts/tag.sh` or a tag workflow tags itself
+   after the merge: commit only, and say so.) `git commit -m "Release vX.Y.Z"` and
    `git tag -a vX.Y.Z -m ...`. Never move or force-push a tag that exists.
 8. **Report** in at most 6 lines: version, tag, gate result, reviewer verdict,
    and the exact commands the user runs to publish (`git push origin
