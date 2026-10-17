@@ -1,6 +1,6 @@
 {
   "name": "lean-workflow",
-  "version": "1.3.0",
+  "version": "1.5.0",
   "description": "Token-efficient, self-improving Claude Code workflow: usage dashboard and guards, model rungs, read-only scout and independent reviewer agents, a code map, orient and gate scripts, size warnings, a habit coach with /coach, an end-of-session retro that tunes the rules on evidence, and a weekly upgrade-scan.",
   "author": {
     "name": "Braydenh563"
@@ -32,5 +32,6 @@
       "description": "Comma-separated habits the coach should not count or show: longSession, longPr, agentModel, bigPaste, bigImage, idleGap, weeklyLimit, reread, fanOut.",
       "default": ""
     }
-  }
+  },
+  "hooks": "./hooks/stop.json"
 }

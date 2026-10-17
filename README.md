@@ -12,7 +12,7 @@
 
 <p align="center">
   <a href="https://github.com/Braydenh563/lean-workflow/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Braydenh563/lean-workflow/actions/workflows/ci.yml/badge.svg"></a>
-  <img alt="version 1.3.0" src="https://img.shields.io/badge/version-1.3.0-2DD4BF?labelColor=0B1220">
+  <img alt="version 1.5.0" src="https://img.shields.io/badge/version-1.5.0-2DD4BF?labelColor=0B1220">
   <a href="LICENSE"><img alt="MIT licence" src="https://img.shields.io/badge/licence-MIT-38BDF8?labelColor=0B1220"></a>
   <img alt="Claude Code plugin" src="https://img.shields.io/badge/Claude%20Code-plugin-FBBF24?labelColor=0B1220"><br>
   <a href="#install"><img alt="Install" src="https://img.shields.io/badge/-Install-0B1220?style=flat-square"></a>
@@ -65,7 +65,7 @@ Nine habits are watched. Each nudge shows **once per session** (at most two per 
 
 | Habit | Fires when | Cheaper alternative |
 | --- | --- | --- |
-| Long session | 3 h since `$.session.usage().startedAt`, 100 turns, or 150k context | Handover, retro, fresh session |
+| Long session | 3 h since `$.session.usage().startedAt`, 100 turns, or 150k context | Handover, then type `/compact` (a fresh session at a milestone) |
 | Long-lived PR | Branch has 25 commits, or its oldest commit (from `git log` against the default branch) is 3 days old | Merge what is done; open the rest as a second PR |
 | Agent model | An `Agent` call on opus or sonnet whose brief is lookup-sized (or opus with no design, review or debugging in it) | haiku, or sonnet |
 | Big paste | A prompt over 20,000 characters | Save to a file, grep it, read a line range |
@@ -82,6 +82,7 @@ Nine habits are watched. Each nudge shows **once per session** (at most two per 
 | Command | Shows |
 | --- | --- |
 | `/spend` | This session's cost split by model and token type, against your own median, with one next step |
+| `/progress` | Work order bar and next item, tasks, running agents, open inbox items, and each plan's checklist as a bar (also at the end of `/dash`) |
 | `/dash` | Context bar, agents, tasks and cost by model (a pane where the surface has one, text otherwise) |
 | `/coach` | Habit counts for this session and your history, with the trend |
 | `/prune` | Plugins you have not used across the sessions recorded (after five) |
@@ -91,6 +92,8 @@ Nine habits are watched. Each nudge shows **once per session** (at most two per 
 - `lean-setup` installs the files in the next section.
 - `retro` measures the session, appends one ledger line and changes at most one rule, and only when the same signal appears in two or more lines.
 - `upgrade-scan` is a weekly routine for this repo's maintainer. It reads the retro ledgers, Anthropic model and Claude Code release notes and the plugin API types (diffed against `api-snapshot.json`), and proposes routing-table and hook updates in one PR with a quote or ledger lines as evidence for each. It never merges and never routes to Fable. Run it as a scheduled task or by hand.
+- `work` runs a preset order until it is done: `/work ship [PR]` (merge the base in, CI green, CodeQL and review threads cleared, a reviewer pass for bugs and clashes, then merge) or `/work continue` (the queue, plus a scan every 3 items rotating bugs, security, architecture, UI and WCAG with overflow checks, and learnability). It writes `.claude/work-order.md`; a Stop hook then refuses to end the run while that order is `active`, handing back the next unticked item, capped at `max-continues` (40). Stop it with `/work stop`. Pair it with `autoContinueAtUsageLimit` so a run resumes after the 5-hour reset.
+- `away` runs when you say you are going to sleep, to work or away: it writes the queue and handover, works item by item (Haiku scouts, Sonnet builds, a reviewer checks), opens a PR every 3 to 5 items, stops at 85% of the weekly limit, and leaves an 8-line summary for your phone. No keep-warm pings: Claude Code's idle compaction already shrinks the context before the hour-long cache expires.
 - Agents: `scout` (read-only finder, Haiku), `reviewer` (independent diff check), `ux-auditor`, `blind-tester`.
 
 ## What `lean-setup` adds to a repo
