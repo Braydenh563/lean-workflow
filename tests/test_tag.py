@@ -113,3 +113,23 @@ def test_the_workflow_offers_a_run_button_with_a_version_box():
     assert "${{ inputs.version }}" in text and "run: |" in text
     # inputs reach the shell through env, never interpolated into the script text
     assert "${{ inputs" not in text.split("run: |", 1)[1]
+
+
+def test_a_refused_tag_does_not_stop_the_others_and_the_run_still_fails_with_the_fix(tmp_path):
+    remote = tmp_path / "remote.git"
+    subprocess.run(["git", "init", "-q", "--bare", str(remote)], check=True)
+    hook = remote / "hooks" / "pre-receive"
+    hook.write_text('#!/bin/sh\nwhile read old new ref; do [ "$ref" = refs/tags/lean-workflow--v1.1.0 ] && { echo "refusing to allow a GitHub App to create or update workflow" >&2; exit 1; }; done\nexit 0\n')
+    hook.chmod(0o755)
+    (tmp_path / "work").mkdir()
+    repo = repo_at(tmp_path / "work")
+    release(repo, "1.0.0")
+    release(repo, "1.1.0")
+    release(repo, "1.2.0")
+    git(repo, "remote", "add", "origin", str(remote))
+    env = {"GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t", "PATH": "/usr/bin:/bin:/usr/local/bin"}
+    r = subprocess.run(["bash", str(repo / "scripts" / "tag.sh"), "--all", "--push"], cwd=repo, capture_output=True, text=True, env=env)
+    assert r.returncode == 1
+    assert "not pushed: lean-workflow--v1.1.0" in r.stderr and "scripts/tag.sh --all --push" in r.stderr
+    pushed = git(remote, "tag", "-l")
+    assert "lean-workflow--v1.0.0" in pushed and "lean-workflow--v1.2.0" in pushed and "v1.1.0" not in pushed

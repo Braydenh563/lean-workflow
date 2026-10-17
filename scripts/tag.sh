@@ -45,4 +45,14 @@ else
   fi
   tag_version "$target" "$c"
 fi
-if [ "$push" -eq 1 ] && [ "${#new[@]}" -gt 0 ]; then git push origin "${new[@]}"; fi
+if [ "$push" -eq 1 ] && [ "${#new[@]}" -gt 0 ]; then
+  # One push per tag, so a refusal of one does not stop the rest.
+  failed=()
+  for t in "${new[@]}"; do git push origin "$t" || failed+=("$t"); done
+  if [ "${#failed[@]}" -gt 0 ]; then
+    echo "not pushed: ${failed[*]}" >&2
+    echo "GitHub refuses a tag push from Actions (GITHUB_TOKEN) when the tagged commit's history changes a file under .github/workflows." >&2
+    echo "Push those from your own checkout instead: git fetch origin main --tags && scripts/tag.sh --all --push" >&2
+    exit 1
+  fi
+fi
