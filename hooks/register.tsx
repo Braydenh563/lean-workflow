@@ -95,8 +95,28 @@ export const register: Register = (on, options) => {
   }).catch(($, e, next) => next(e))
 
   on('command.run', { command: 'dash' }, async $ => {
-    await $.ui.open({ id: PANE, title: 'Usage' })
-    return { text: 'Usage dashboard opened.' }
+    const opened = await $.ui.open({ id: PANE, title: 'Usage' })
+    if (opened?.isPlaced) return { text: 'Usage dashboard opened.' }
+    // Surfaces that seat no panes (the desktop app here) get the same dashboard as text.
+    const agents = await read($, agentsA)
+    const tasks = await read($, tasksA)
+    const costs = await read($, costsA)
+    const s = await read($, statsA)
+    const now = await $.clock.now()
+    const total = Object.values(costs).reduce((a, c) => a + weighted(c), 0) || 1
+    const done = tasks.filter(t => t.status === 'completed').length
+    return {
+      text: [
+        `session: ${label(s)} · blocked ${s.denies}`,
+        `agents: ${agents.length === 0 ? 'none yet' : ''}`,
+        ...agents.slice(-8).map(a => `  ${a.endedAt === undefined ? 'runs' : 'done'} ${a.type} (${a.model}) ${Math.round(((a.endedAt ?? now) - a.startedAt) / 1000)}s, ${a.calls} calls${a.tokens ? `, ${k(a.tokens)}` : ''}: ${a.desc}`),
+        `tasks: ${tasks.length ? `${done}/${tasks.length} done` : 'none'}`,
+        ...tasks.slice(-8).map(t => `  ${t.status === 'completed' ? 'done' : t.status === 'in_progress' ? 'now ' : 'todo'} ${t.subject}`),
+        'cost by model (weighted):',
+        ...Object.entries(costs).map(([m, c]) => `  ${m}: ${Math.round((100 * weighted(c)) / total)}%, ${c.turns} turns, out ${k(c.output)}`),
+        `next step: ${advice(s, costs)}`,
+      ].join('\n'),
+    }
   })
 
   on('command.run', { command: 'spend' }, async $ => {
