@@ -79,3 +79,37 @@ def test_no_version_is_an_error(tmp_path):
     git(repo, "commit", "-qm", "x")
     r = subprocess.run(["bash", str(repo / "scripts" / "tag.sh")], cwd=repo, capture_output=True, text=True)
     assert r.returncode == 1 and "no version" in r.stderr
+
+
+def test_version_tags_an_earlier_release_on_its_own_commit(tmp_path):
+    repo = repo_at(tmp_path)
+    a = release(repo, "1.0.0")
+    release(repo, "1.1.0")
+    assert "tagged  lean-workflow--v1.0.0" in tag(repo, "--version", "v1.0.0")
+    assert git(repo, "rev-list", "-n1", "lean-workflow--v1.0.0") == a
+    assert git(repo, "tag", "-l") == "lean-workflow--v1.0.0"
+
+
+def test_version_that_was_never_released_is_an_error_naming_the_fix(tmp_path):
+    repo = repo_at(tmp_path)
+    release(repo, "1.0.0")
+    r = subprocess.run(["bash", str(repo / "scripts" / "tag.sh"), "--version", "9.9.9"], cwd=repo, capture_output=True, text=True)
+    assert r.returncode == 1
+    assert "never appears" in r.stderr and "1.0.0" in r.stderr
+    assert git(repo, "tag", "-l") == ""
+
+
+def test_version_must_look_like_a_version(tmp_path):
+    repo = repo_at(tmp_path)
+    release(repo, "1.0.0")
+    r = subprocess.run(["bash", str(repo / "scripts" / "tag.sh"), "--version", "latest"], cwd=repo, capture_output=True, text=True)
+    assert r.returncode == 2
+
+
+def test_the_workflow_offers_a_run_button_with_a_version_box():
+    text = (ROOT / ".github" / "workflows" / "tag.yml").read_text()
+    for part in ("workflow_dispatch:", "version:", "required: true", "backfill:", "release:", "contents: write", "scripts/tag.sh --version"):
+        assert part in text, part
+    assert "${{ inputs.version }}" in text and "run: |" in text
+    # inputs reach the shell through env, never interpolated into the script text
+    assert "${{ inputs" not in text.split("run: |", 1)[1]

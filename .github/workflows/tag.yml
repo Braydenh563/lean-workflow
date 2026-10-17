@@ -1,19 +1,60 @@
 name: Tag release
-# When plugin.json's version is new on main, tag the commit that set it (lean-workflow--vX.Y.Z).
+# Two ways in:
+#  - a push to main that changes plugin.json tags the version it sets;
+#  - Actions > Tag release > Run workflow: type a version (1.7.0), and it tags that version's commit and
+#    creates the GitHub release. Tick "backfill" to tag every earlier version that has no tag.
+# The tag is lean-workflow--vX.Y.Z on the commit where plugin.json first carried that version.
 on:
   push:
     branches: [main]
     paths: [".claude-plugin/plugin.json"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to tag, e.g. 1.7.0 (must already be in plugin.json on main)"
+        required: true
+        type: string
+      release:
+        description: "Also create the GitHub release page"
+        type: boolean
+        default: true
+      backfill:
+        description: "Instead, tag every earlier version that has no tag (the version above is ignored)"
+        type: boolean
+        default: false
 permissions:
   contents: write
 jobs:
   tag:
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      INPUT_VERSION: ${{ inputs.version }}
+      INPUT_RELEASE: ${{ inputs.release }}
+      INPUT_BACKFILL: ${{ inputs.backfill }}
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: main
           fetch-depth: 0
-      - run: |
+      - name: Tag
+        run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          bash scripts/tag.sh --push
+          if [ "$INPUT_BACKFILL" = "true" ]; then
+            bash scripts/tag.sh --all --push
+            exit 0
+          fi
+          version="${INPUT_VERSION#v}"
+          if [ -n "$version" ]; then
+            printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo "::error::version must look like 1.7.0, got '$INPUT_VERSION'"; exit 1; }
+            bash scripts/tag.sh --version "$version" --push
+          else
+            bash scripts/tag.sh --push
+            version=$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' .claude-plugin/plugin.json | sed -n 1p)
+          fi
+          # a push-triggered run has no INPUT_RELEASE and does not create release pages
+          if [ "$INPUT_RELEASE" = "true" ]; then
+            tag="lean-workflow--v$version"
+            gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" --verify-tag --title "lean-workflow $version" --generate-notes
+          fi
