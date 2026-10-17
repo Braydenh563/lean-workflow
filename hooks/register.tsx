@@ -2,6 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { Register } from 'claude-code'
 
 import type { AgentRow, ModelCost, SessionSummary, Stats, TaskRow } from '../types'
+import { dashText, k } from './format'
 
 const DEFAULT_GREP_ONLY = '(^|/)(CODEMAP\\.md|HISTORY\\.md|CHANGELOG\\.md|package-lock\\.json|yarn\\.lock|pnpm-lock\\.yaml|poetry\\.lock|Cargo\\.lock)$|\\.min\\.js$|\\.map$'
 // Agents that pin their own model; anything else must name one (the rungs).
@@ -42,10 +43,6 @@ type Usage = { input_tokens: number; output_tokens: number; cache_read_input_tok
 
 function weighted(c: ModelCost): number {
   return c.input * W.input + c.reads * W.reads + c.writes * W.writes + c.output * W.output
-}
-
-function k(n: number): string {
-  return n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : `${Math.round(n / 1000)}k`
 }
 
 function label(s: Stats): string {
@@ -123,24 +120,22 @@ export const register: Register = (on, options) => {
     const opened = await $.ui.open({ id: PANE, title: 'Usage' })
     if (opened?.isPlaced) return { text: 'Usage dashboard opened.' }
     // Surfaces that seat no panes (the desktop app here) get the same dashboard as text.
-    const agents = await read($, agentsA)
-    const tasks = await read($, tasksA)
     const costs = await read($, costsA)
     const s = await read($, statsA)
-    const now = await $.clock.now()
     const total = Object.values(costs).reduce((a, c) => a + weighted(c), 0) || 1
-    const done = tasks.filter(t => t.status === 'completed').length
+    const sum = (f: (c: ModelCost) => number) => Object.values(costs).reduce((a, c) => a + f(c), 0) / total
     return {
-      text: [
-        `session: ${label(s)} · blocked ${s.denies}`,
-        `agents: ${agents.length === 0 ? 'none yet' : ''}`,
-        ...agents.slice(-8).map(a => `  ${a.endedAt === undefined ? 'runs' : 'done'} ${a.type} (${a.model}) ${Math.round(((a.endedAt ?? now) - a.startedAt) / 1000)}s, ${a.calls} calls${a.tokens ? `, ${k(a.tokens)}` : ''}: ${a.desc}`),
-        `tasks: ${tasks.length ? `${done}/${tasks.length} done` : 'none'}`,
-        ...tasks.slice(-8).map(t => `  ${t.status === 'completed' ? 'done' : t.status === 'in_progress' ? 'now ' : 'todo'} ${t.subject}`),
-        'cost by model (weighted):',
-        ...Object.entries(costs).map(([m, c]) => `  ${m}: ${Math.round((100 * weighted(c)) / total)}%, ${c.turns} turns, out ${k(c.output)}`),
-        `next step: ${advice(s, costs)}`,
-      ].join('\n'),
+      text: dashText({
+        stats: s,
+        agents: await read($, agentsA),
+        tasks: await read($, tasksA),
+        costs: Object.entries(costs).map(([model, c]) => ({ model, share: weighted(c) / total, turns: c.turns, out: c.output })),
+        split: { reads: sum(c => c.reads * W.reads), writes: sum(c => c.writes * W.writes), output: sum(c => c.output * W.output) },
+        now: await $.clock.now(),
+        advice: advice(s, costs),
+        trend: await trend($, s),
+        bigContext: BIG_CONTEXT,
+      }),
     }
   })
 

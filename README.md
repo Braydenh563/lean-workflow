@@ -30,7 +30,7 @@ plugin tells it to when CLAUDE.md has no "Lean workflow" section).
 ## Commands
 
 - `/spend`: this session's cost split, by model, against your median, and the best next step.
-- `/dash`: a pane with running agents (model, time, calls, tokens), tasks, cost by model.
+- `/dash`: a pane (or, where none is seated, a styled text dashboard with context bar, agents, tasks, cost by model and split, next step).
 - `/prune`: plugins never used in the sessions recorded (after five).
 
 ## What it adds to a repo (`lean-setup`)
