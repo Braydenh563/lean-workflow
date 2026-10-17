@@ -65,7 +65,7 @@ Nine habits are watched. Each nudge shows **once per session** (at most two per 
 
 | Habit | Fires when | Cheaper alternative |
 | --- | --- | --- |
-| Long session | 3 h since `$.session.usage().startedAt`, 100 turns, or 150k context | Handover, retro, fresh session |
+| Long session | 3 h since `$.session.usage().startedAt`, 100 turns, or 150k context | Handover, then type `/compact` (a fresh session at a milestone) |
 | Long-lived PR | Branch has 25 commits, or its oldest commit (from `git log` against the default branch) is 3 days old | Merge what is done; open the rest as a second PR |
 | Agent model | An `Agent` call on opus or sonnet whose brief is lookup-sized (or opus with no design, review or debugging in it) | haiku, or sonnet |
 | Big paste | A prompt over 20,000 characters | Save to a file, grep it, read a line range |

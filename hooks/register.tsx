@@ -18,7 +18,7 @@ const AUTOPILOT = [
   'Lean workflow autopilot (from the lean-workflow plugin):',
   '- Run the lean-setup skill once per repo, only when CLAUDE.md neither has a "Lean workflow" section nor names the lean-workflow plugin, and no retro ledger exists. A repo that already carries the workflow is never set up again.',
   '- Route by rungs: haiku (scout) for lookup and mechanical work, sonnet for implementation, opus for design and risky review. Every Agent call names a model. Fable only when the user names it for that task.',
-  '- When the user\'s ask is done and pushed, or a plugin note says context is high, update the handover state, run the retro skill, and tell the user to start a fresh session.',
+  '- When the user\'s ask is done and pushed, or a plugin note says context is high, write the current state to the handover file, then tell the user to type /compact (the model cannot run it); run the retro skill only at a milestone.',
   '- If scripts/orient.sh exists, run it first in a session. If scripts/gate.sh exists, run it before every push. If docs/CODEMAP.md exists, grep it before opening source files.',
   '- Agents keep a remaining-work file and commit at least every 20 minutes. Tests take a fixed "now" instead of reading the clock. A claim about how a UI looks needs a measurement from the running app.',
   '- Batch independent tool calls; grep then read line ranges; one retry per new hypothesis.',
@@ -60,7 +60,7 @@ function advice(s: Stats, costs: Record<string, ModelCost>): string {
   const opus = Object.entries(costs).filter(([m]) => /opus/.test(m)).reduce((a, [, c]) => a + weighted(c), 0)
   if (s.week !== undefined && s.week >= 70) return `Weekly limit at ${s.week}%${s.weekResets ? ` (resets ${s.weekResets})` : ''}: work as tier pro until it resets: one agent, Sonnet, no Opus, short sessions.`
   if (s.fiveHour !== undefined && s.fiveHour >= 80) return `5-hour window at ${s.fiveHour}%: commit and push now, finish the step, then start fresh after the reset.`
-  if (s.ctx > BIG_CONTEXT) return `Context ${k(s.ctx)} per turn: update the HANDOVER "Now" line and start a fresh session at the next milestone.`
+  if (s.ctx > BIG_CONTEXT) return `Context ${k(s.ctx)} per turn: update the HANDOVER "Now" line and compact now (/compact keep: current task, open items); the handover file keeps the state.`
   if (writes > 0.4 * total && s.turns > 3) return 'Cache writes are over 40% of cost: avoid gaps over an hour, model switches and idle check-ins.'
   if (opus > 0.6 * total && s.agents > 0) return 'Opus is over 60% of cost: route labour to haiku and implementation to sonnet.'
   if (s.turns > 0 && s.calls / s.turns > 25) return 'Many tool calls per turn: name files and line ranges in briefs, batch independent calls.'
@@ -346,7 +346,7 @@ export const register: Register = (on, options) => {
     }
     if (s.ctx > BIG_CONTEXT && !ctxNoted) {
       ctxNoted = true
-      notes.push(`${$.plugin.name}: context is ${k(s.ctx)} per turn. Finish the current step, update the handover state, run the retro skill, and tell the user to start a fresh session.`)
+      notes.push(`${$.plugin.name}: context is ${k(s.ctx)} per turn. Finish the current step, write the current state to the handover file, then tell the user to type /compact (the model cannot run it); run the retro skill only at a milestone.`)
     }
     // Appended to the conversation, not the system prompt, so the cache stays warm.
     return notes.length && ran.deny === undefined ? { ...ran, context: [...(ran.context ?? []), ...notes] } : ran
