@@ -300,10 +300,11 @@ export const register: Register = (on, options) => {
   }).catch(($, e, next) => next(e))
 
   on('command.run', { command: 'dash' }, async $ => {
-    const opened = await $.ui.open({ id: PANE, title: 'Usage' })
-    if (opened?.isPlaced) return { text: 'Usage dashboard opened.' }
-    // Surfaces that seat no panes (the desktop app here) get the same dashboard as text.
-    return { text: await dashView($) }
+    // A host that throws on panes, or says it placed one the user cannot see (the desktop
+    // app has done both), must still show something: the text always comes back.
+    const opened = await $.ui.open({ id: PANE, title: 'Usage' }).catch(() => undefined)
+    const text = await dashView($).catch(err => `lean-workflow: the dashboard failed to build (${String(err)}). /progress and /spend still work.`)
+    return { text: opened?.isPlaced ? `Usage dashboard opened in a pane.\n\n${text}` : text }
   })
 
   on('command.run', { command: 'progress' }, async $ => ({ text: await progress($) }))
