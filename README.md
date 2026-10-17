@@ -1,6 +1,10 @@
 <p align="center">
-  <img src="assets/logo.svg" alt="lean-workflow" width="460">
+  <img src="assets/mark.svg" width="112" height="112" alt="lean-workflow logo">
 </p>
+
+<h1 align="center">lean-workflow</h1>
+
+<p align="center"><strong>Fewer tokens per task. The checks stay.</strong></p>
 
 <p align="center">
   A Claude Code plugin that keeps sessions cheap and repeatable: guards against the usual token sinks,
