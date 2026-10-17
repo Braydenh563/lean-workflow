@@ -12,7 +12,7 @@
 
 <p align="center">
   <a href="https://github.com/Braydenh563/lean-workflow/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Braydenh563/lean-workflow/actions/workflows/ci.yml/badge.svg"></a>
-  <img alt="version 1.6.0" src="https://img.shields.io/badge/version-1.6.0-2DD4BF?labelColor=0B1220">
+  <img alt="version 1.6.1" src="https://img.shields.io/badge/version-1.6.1-2DD4BF?labelColor=0B1220">
   <a href="LICENSE"><img alt="MIT licence" src="https://img.shields.io/badge/licence-MIT-38BDF8?labelColor=0B1220"></a>
   <img alt="Claude Code plugin" src="https://img.shields.io/badge/Claude%20Code-plugin-FBBF24?labelColor=0B1220"><br>
   <a href="#install"><img alt="Install" src="https://img.shields.io/badge/-Install-0B1220?style=flat-square"></a>
@@ -105,7 +105,7 @@ Set your own line in the plugin options (`finishAtWeek`, `finishAtFiveHour`) or 
 | --- | --- |
 | `/spend` | This session's cost split by model and token type, against your own median, with one next step |
 | `/progress` | Work order bar and next item, tasks, running agents, open inbox items, and each plan's checklist as a bar (also at the end of `/dash`) |
-| `/dash` | Live 5-hour and weekly limit bars with reset time, the tier and mode, a weekly trend from your stored sessions, context bar, agents, tasks and cost by model. A pane where the surface seats one, the same thing as text otherwise |
+| `/dash` | Live 5-hour and weekly limit bars with reset time, the tier and mode, a weekly trend from your stored sessions, context bar, agents, tasks and cost by model. Always printed as text (a pane opens too where the surface seats one), even when opening the pane fails. A command typed while a turn runs is queued until the turn ends; if it still shows nothing, ask Claude for the dashboard (it calls the `view` tool) |
 | `/brief` | The morning briefing again (below) |
 | `/coach` | Habit counts for this session and your history, with the trend |
 | `/prune` | Plugins you have not used across the sessions recorded (after five) |

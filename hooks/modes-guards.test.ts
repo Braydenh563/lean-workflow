@@ -5,7 +5,7 @@ const base = { origin: { kind: 'user' }, wait: false } as never
 type On = Parameters<Parameters<typeof test>[1]>[1]
 
 // Everything beneath the plugin: a clock, the host's usage figures, an in-memory store and repo files, and a capture of toasts and writes.
-function wire(on: On, o: { week?: number; fiveHour?: number; files?: Record<string, string>; panes?: boolean } = {}) {
+function wire(on: On, o: { week?: number; fiveHour?: number; files?: Record<string, string>; panes?: boolean; panesThrow?: boolean } = {}) {
   const toasts: string[] = []
   const writes: Record<string, string> = {}
   const store = new Map<string, unknown>()
@@ -15,7 +15,10 @@ function wire(on: On, o: { week?: number; fiveHour?: number; files?: Record<stri
   on('session.start', (_$, e) => ({ cwd: (e as unknown as { cwd: string }).cwd }) as never)
   on('ui.toast', (_$, e) => (toasts.push((e as unknown as { text: string }).text), { value: undefined }) as never)
   on('ui.status', () => ({ value: undefined }) as never)
-  on('ui.open', () => ({ value: o.panes ? { isPlaced: true } : { isPlaced: false, reason: 'no panes here' } }) as never)
+  on('ui.open', () => {
+    if (o.panesThrow) throw new Error('panes unsupported')
+    return { value: o.panes ? { isPlaced: true } : { isPlaced: false, reason: 'no panes here' } } as never
+  })
   on('command.register', () => ({ value: { command: 'x' } }) as never)
   on('tool.register', () => ({ value: { tool: 'x' } }) as never)
   on('tool.call', () => ({ result: 'ok', text: 'ok' }) as never)
@@ -70,7 +73,17 @@ test('/dash falls back to text with live limit bars and a week trend from stored
 test('/dash opens the pane where the surface seats one', async ($, on) => {
   wire(on, { panes: true })
   const r = await $.command.run({ command: 'dash', args: '' } as never)
-  expect((r as { text?: string }).text).toBe('Usage dashboard opened.')
+  const text = String((r as { text?: string }).text)
+  expect(text).toContain('Usage dashboard opened in a pane.')
+  expect(text).toContain('CONTEXT PER TURN')
+})
+
+test('/dash still answers in text when the host throws on opening a pane', async ($, on) => {
+  wire(on, { panesThrow: true })
+  const r = await $.command.run({ command: 'dash', args: '' } as never)
+  const text = String((r as { text?: string }).text)
+  expect(text).not.toContain('opened')
+  expect(text).toContain('CONTEXT PER TURN')
 })
 
 test('/dash says when the host reports no limits', async ($, on) => {

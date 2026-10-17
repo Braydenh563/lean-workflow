@@ -1,6 +1,6 @@
 {
   "name": "lean-workflow",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "description": "Token-efficient, self-improving Claude Code workflow: usage dashboard and guards, model rungs, read-only scout and independent reviewer agents, a code map, orient and gate scripts, size warnings, a habit coach with /coach, live limit bars and a tier that follows the weekly limit, modes (focus, triage, review, budget, release), guards and a morning briefing for unattended runs, an end-of-session retro, a per-item rung ledger and a weekly upgrade-scan.",
   "author": {
     "name": "Braydenh563"
