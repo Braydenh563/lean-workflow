@@ -76,6 +76,8 @@ async function trend($: { store: { get: (k: string) => Promise<unknown> } }, s: 
 export const register: Register = (on, options) => {
   const grepOnly = new RegExp(String((options as { grepOnly?: string }).grepOnly || DEFAULT_GREP_ONLY))
   let ctxNoted = false
+  // A turn's usage sums every model request in it; each main-thread tool call adds one.
+  let turnCalls = 0
   const bigOutputs = new Set<string>()
   let fableAsked = false
   let lastKey = ''
@@ -116,6 +118,7 @@ export const register: Register = (on, options) => {
   // Fable is opt-in: any later prompt that does not name it clears the grant.
   on('prompt.submit', async ($, e, next) => {
     fableAsked = /fable/i.test(e.text)
+    turnCalls = 0
     const now = await $.clock.now()
     const s = await read($, statsA)
     if (lastTurnAt && now - lastTurnAt > COLD_MS) {
@@ -155,7 +158,7 @@ export const register: Register = (on, options) => {
       await update($, agentsA, list => list.map(a => (a.id === e.agentId ? { ...a, endedAt: now, tokens: a.tokens + tokens } : a)))
     } else if (u) {
       lastTurnAt = await $.clock.now()
-      const ctx = u.input_tokens + u.cache_read_input_tokens + u.cache_creation_input_tokens
+      const ctx = Math.round((u.input_tokens + u.cache_read_input_tokens + u.cache_creation_input_tokens) / (turnCalls + 1))
       const s = await update($, statsA, x => ({ ...x, turns: x.turns + 1, ctx }))
       if (ctx > BIG_CONTEXT && !bigWarned) {
         bigWarned = true
@@ -217,6 +220,7 @@ export const register: Register = (on, options) => {
       await update($, agentsA, list => list.map(a => (a.id === agentId ? { ...a, calls: a.calls + 1, lastTool: e.tool } : a)))
       return next(e)
     }
+    turnCalls += 1
     const key = JSON.stringify(args)
     repeats = key === lastKey ? repeats + 1 : 1
     lastKey = key
