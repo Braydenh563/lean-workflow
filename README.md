@@ -12,7 +12,7 @@
 
 <p align="center">
   <a href="https://github.com/Braydenh563/lean-workflow/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Braydenh563/lean-workflow/actions/workflows/ci.yml/badge.svg"></a>
-  <img alt="version 1.1.1" src="https://img.shields.io/badge/version-1.1.1-2DD4BF?labelColor=0B1220">
+  <img alt="version 1.3.0" src="https://img.shields.io/badge/version-1.3.0-2DD4BF?labelColor=0B1220">
   <a href="LICENSE"><img alt="MIT licence" src="https://img.shields.io/badge/licence-MIT-38BDF8?labelColor=0B1220"></a>
   <img alt="Claude Code plugin" src="https://img.shields.io/badge/Claude%20Code-plugin-FBBF24?labelColor=0B1220"><br>
   <a href="#install"><img alt="Install" src="https://img.shields.io/badge/-Install-0B1220?style=flat-square"></a>
@@ -55,10 +55,27 @@ files below. A repo that already has the workflow is left alone.
 
 ### Warnings
 
-- Live context window and your 5-hour and weekly limits in the status line (from the host, not estimated); a note once context passes 150k, and pro-tier advice once the weekly limit passes 70% or the 5-hour window passes 80%.
-- A cold prompt cache after 55 idle minutes.
-- Images in a prompt and any tool result over 20,000 characters, since both ride in context on every later turn.
+- Live context window and your 5-hour and weekly limits in the status line (from the host, not estimated); a note to the model once context passes 150k.
+- Any tool result over 20,000 characters, since it rides in context on every later turn.
 - `CLAUDE.md` over 200 lines, `.claude/now.md` over 60 lines or at 20 inbox items.
+
+### Habit coach
+
+Nine habits are watched. Each nudge shows **once per session** (at most two per prompt), names the cheaper alternative and gives an estimated saving. Savings are in token-equivalents (plain input = 1; cache reads 0.1, writes 2, output 5) from the assumptions in `hooks/coach.ts`, not measured spend.
+
+| Habit | Fires when | Cheaper alternative |
+| --- | --- | --- |
+| Long session | 3 h since `$.session.usage().startedAt`, 100 turns, or 150k context | Handover, retro, fresh session |
+| Long-lived PR | Branch has 25 commits, or its oldest commit (from `git log` against the default branch) is 3 days old | Merge what is done; open the rest as a second PR |
+| Agent model | An `Agent` call on opus or sonnet whose brief is lookup-sized (or opus with no design, review or debugging in it) | haiku, or sonnet |
+| Big paste | A prompt over 20,000 characters | Save to a file, grep it, read a line range |
+| Images | 2 or more images, or one over 1 MB | Crop to the problem, or state the numbers |
+| Idle gap | 55 minutes since the last turn (the prompt cache has likely expired) | Fresh session from the handover |
+| Weekly limit | The `seven_day` window is 70% used, or 50% used and 20 points ahead of an even burn | Cheaper rungs; big runs wait for the reset |
+| Re-reads | The same file read whole 3 times (a ranged read does not count) | Put the facts in `now.md`, or grep and read a line range |
+| Agent fan-out | 4 or more `Agent` calls in one prompt | One haiku scout to locate, then at most two builders |
+
+`/coach` reports each habit's count this session and in your stored sessions (the last 30), the estimated tokens the nudges flagged (what they pointed at, not spend saved), and the trend: the older half of those sessions against the newer half, once there are four. Nudges only advise; the one denial remains the unnamed-agent guard. The coach never suggests Fable.
 
 ### Commands
 
@@ -66,12 +83,14 @@ files below. A repo that already has the workflow is left alone.
 | --- | --- |
 | `/spend` | This session's cost split by model and token type, against your own median, with one next step |
 | `/dash` | Context bar, agents, tasks and cost by model (a pane where the surface has one, text otherwise) |
+| `/coach` | Habit counts for this session and your history, with the trend |
 | `/prune` | Plugins you have not used across the sessions recorded (after five) |
 
 ### Skills and agents
 
 - `lean-setup` installs the files in the next section.
 - `retro` measures the session, appends one ledger line and changes at most one rule, and only when the same signal appears in two or more lines.
+- `upgrade-scan` is a weekly routine for this repo's maintainer. It reads the retro ledgers, Anthropic model and Claude Code release notes and the plugin API types (diffed against `api-snapshot.json`), and proposes routing-table and hook updates in one PR with a quote or ledger lines as evidence for each. It never merges and never routes to Fable. Run it as a scheduled task or by hand.
 - Agents: `scout` (read-only finder, Haiku), `reviewer` (independent diff check), `ux-auditor`, `blind-tester`.
 
 ## What `lean-setup` adds to a repo
@@ -105,9 +124,11 @@ Set under the plugin's options.
 | `grepOnly` | code maps, histories, changelogs, lockfiles, `.min.js`, `.map` | Regex of paths that must not be read whole |
 | `claudeMdMaxLines` | 200 | Warn when `CLAUDE.md` is read whole or written past this |
 | `nowMaxLines` | 60 | Same for `.claude/now.md` |
+| `coachOff` | empty | Comma-separated habits the coach should not count or show, e.g. `bigImage, idleGap` |
 
 ## Status and limits
 
+- Coach savings are estimates built on stated assumptions (20 turns of carry, 800 tokens per commit diff, 1,500 per image, 15k to start an agent, 50k per agent run, relative prices haiku 1 : sonnet 3 : opus 5). `upgrade-scan` re-checks the prices; treat the numbers as a ranking of habits, not a bill.
 - Usage figures are the plugin's own counts of the session's token usage, weighted by relative price (reads 0.1, input 1, writes 2, output 5). They are ratios for comparison, not plan usage or money.
 - The guards and templates are tested (`claude plugin test .`, `pytest tests`). Whether the rules save tokens in your repo is something to read off your own ledger; one session proves nothing, which is why `retro` waits for repeats.
 - `codemap.py` reads Python with `ast` and JS/TS/Go with regular expressions, so it can miss unusual declaration styles. It maps top-level and exported definitions only.
@@ -121,7 +142,7 @@ claude plugin validate .   # manifest
 python -m pytest tests     # template tests, in a scratch repo
 ```
 
-Layout: `hooks/` (guards, commands, formatting), `skills/` (`lean-setup` with `templates/`, `retro`), `agents/`, `.claude-plugin/` (manifests).
+Layout: `hooks/` (guards and commands in `register.tsx`, coach rules in `coach.ts`, formatting), `skills/` (`lean-setup` with `templates/`, `retro`, `upgrade-scan`), `agents/`, `.claude-plugin/` (manifests).
 
 ## Licence
 

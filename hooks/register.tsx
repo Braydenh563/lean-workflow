@@ -2,6 +2,8 @@ import { atom, read, update } from 'claude-code'
 import type { Register } from 'claude-code'
 
 import type { AgentRow, ModelCost, SessionSummary, Stats, TaskRow } from '../types'
+import { agentModel, bigImage, bigPaste, branchInfo, coachReport, fanOut, idleGap, longPr, longSession, makeCoach, parseOff, reread, weeklyLimit, W } from './coach'
+import type { CoachRow } from './coach'
 import { dashText, k } from './format'
 
 const DEFAULT_GREP_ONLY = '(^|/)(CODEMAP\\.md|HISTORY\\.md|CHANGELOG\\.md|package-lock\\.json|yarn\\.lock|pnpm-lock\\.yaml|poetry\\.lock|Cargo\\.lock)$|\\.min\\.js$|\\.map$'
@@ -10,6 +12,7 @@ const PINNED = new Set(['scout', 'reviewer', 'ux-auditor', 'blind-tester', 'fork
 const HISTORY_KEY = 'history'
 const USED_KEY = 'used'
 const SEEN_KEY = 'seen'
+const COACH_KEY = 'coach'
 // Static, so it caches: a system prompt that changed per turn would rewrite the cache every time.
 const AUTOPILOT = [
   'Lean workflow autopilot (from the lean-workflow plugin):',
@@ -29,9 +32,6 @@ const REPEAT_LIMIT = 3
 const LOOP_TOOLS = new Set(['Bash', 'Read', 'Grep', 'Glob', 'Edit', 'Write', 'WebFetch', 'WebSearch'])
 const BIG_CONTEXT = 150_000
 const BIG_OUTPUT = 20_000
-const COLD_MS = 55 * 60 * 1000 // the 1h prompt cache is about to expire
-// Price relative to plain input; ratios only, not plan usage.
-const W = { input: 1, reads: 0.1, writes: 2, output: 5 }
 const PANE = 'lean-dash'
 
 const agentsA = atom({ plugin: 'lean-workflow', key: 'agents' } as const, [])
@@ -99,13 +99,12 @@ async function trend($: { store: { get: (k: string) => Promise<unknown> } }, s: 
 }
 
 export const register: Register = (on, options) => {
-  const opts = options as { grepOnly?: string; claudeMdMaxLines?: number | string; nowMaxLines?: number | string }
+  const opts = options as { coachOff?: string; grepOnly?: string; claudeMdMaxLines?: number | string; nowMaxLines?: number | string }
   const grepOnly = new RegExp(String(opts.grepOnly || DEFAULT_GREP_ONLY))
   const claudeMax = Number(opts.claudeMdMaxLines) || DEFAULT_CLAUDE_MD_MAX
   const nowMax = Number(opts.nowMaxLines) || DEFAULT_NOW_MAX
   const sizeWarned = new Set<string>()
   let ctxNoted = false
-  let weekWarned = false
   // A turn's usage sums every model request in it; each main-thread tool call adds one.
   let turnCalls = 0
   const bigOutputs = new Set<string>()
@@ -113,11 +112,17 @@ export const register: Register = (on, options) => {
   let lastKey = ''
   let repeats = 0
   let lastTurnAt = 0
-  let bigWarned = false
+  const off = parseOff(opts.coachOff)
+  const coach = makeCoach(off)
+  const reads = new Map<string, number>()
+  let spawned = 0
+  let prChecked = false
+  let prNudge: ReturnType<typeof longPr>
 
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'spend', description: "This session's cost split and the best next step to cut it" })
     await $.command.register({ name: 'prune', description: 'Plugins and skills you never use, from the sessions recorded so far' })
+    await $.command.register({ name: 'coach', description: 'Habit counts and the trend from your stored sessions' })
     await $.command.register({ name: 'dash', description: 'Open the usage dashboard: agents, tasks, cost by model, efficiency' })
     return next(e)
   }).catch(($, e, next) => next(e))
@@ -167,14 +172,30 @@ export const register: Register = (on, options) => {
   on('prompt.submit', async ($, e, next) => {
     fableAsked = /fable/i.test(e.text)
     turnCalls = 0
+    spawned = 0
     const now = await $.clock.now()
     const s = await read($, statsA)
-    if (lastTurnAt && now - lastTurnAt > COLD_MS) {
-      $.ui.toast(`Idle ${Math.round((now - lastTurnAt) / 60000)} min: the cache has likely expired, so this turn re-caches ${k(s.ctx)} tokens. A fresh session may be cheaper.`)
+    const images = e.attachments?.filter(a => a.type === 'image') ?? []
+    let bytes = 0
+    for (const a of images) {
+      const m = a.id ? await $.prompt.media({ id: a.id }).catch(() => undefined) : undefined
+      if (typeof m?.size === 'number') bytes = Math.max(bytes, m.size)
     }
-    if (e.attachments?.some(a => a.type === 'image')) {
-      $.ui.toast('Images stay in context for every later turn. Crop to the problem, or state the numbers instead.')
+    const usage = await $.session.usage().catch(() => undefined)
+    if (!prChecked) {
+      prChecked = true
+      const b = await branchInfo(argv => $.process.run(argv), now).catch(() => undefined)
+      if (b) prNudge = longPr(b)
     }
+    const shown = coach.offer([
+      idleGap({ idleMs: lastTurnAt ? now - lastTurnAt : 0, ctx: s.ctx }),
+      bigPaste(e.text.length),
+      bigImage({ count: images.length, bytes }),
+      usage && longSession({ ageMs: now - usage.startedAt, turns: s.turns, ctx: usage.context.tokens ?? s.ctx }),
+      usage && weeklyLimit(usage.rateLimits, now),
+      prNudge,
+    ])
+    if (shown.length) $.ui.toast(shown.map(t => `${$.plugin.name}: ${t}`).join('\n'))
     return next(e)
   }).catch(($, e, next) => next(e))
 
@@ -224,13 +245,12 @@ export const register: Register = (on, options) => {
         // A host without session.usage keeps the estimate.
       }
       const s = await update($, statsA, x => ({ ...x, ...live, turns: x.turns + 1, ctx }))
-      if ((s.week ?? 0) >= 70 && !weekWarned) {
-        weekWarned = true
-        $.ui.toast(advice(s, await read($, costsA)))
-      }
-      if (ctx > BIG_CONTEXT && !bigWarned) {
-        bigWarned = true
-        $.ui.toast(advice(s, await read($, costsA)))
+      const [shown] = coach.offer([
+        ctx > BIG_CONTEXT ? longSession({ ageMs: 0, turns: s.turns, ctx }) : undefined,
+        s.week === undefined ? undefined : weeklyLimit([{ kind: 'seven_day', percentUsed: s.week, resetsAt: s.weekResets }], await $.clock.now()),
+      ], 1)
+      if (shown) {
+        $.ui.toast(`${$.plugin.name}: ${shown}`)
       }
       $.ui.status(label(s))
     }
@@ -259,7 +279,11 @@ export const register: Register = (on, options) => {
           : `${$.plugin.name}: name a model. haiku for lookup and labour, sonnet to implement, opus for judgement. Unset inherits the orchestrator's model.`,
       }
     }
-    return next(e)
+    const ran = await next(e)
+    spawned += 1
+    const hint = coach.offer([fanOut(spawned), agentModel({ model: args.model, type: args.subagent_type, prompt: String((e as unknown as { prompt?: string }).prompt ?? '') })], 2)
+    // Appended to the conversation so the orchestrator sees it before its next Agent call.
+    return hint.length && ran.deny === undefined ? { ...ran, context: [...(ran.context ?? []), ...hint.map(t => `${$.plugin.name}: ${t}`)] } : ran
   }).catch(($, e, next) => next(e))
 
   // Task tools feed the dashboard's task list.
@@ -315,6 +339,11 @@ export const register: Register = (on, options) => {
         notes.push(note)
       }
     }
+    if (e.tool === 'Read' && target.file_path && target.limit === undefined && ran.deny === undefined) {
+      const count = (reads.get(target.file_path) ?? 0) + 1
+      reads.set(target.file_path, count)
+      notes.push(...coach.offer([reread({ path: target.file_path, count, chars: typeof ran.text === 'string' ? ran.text.length : undefined })], 1).map(t => `${$.plugin.name}: ${t}`))
+    }
     if (s.ctx > BIG_CONTEXT && !ctxNoted) {
       ctxNoted = true
       notes.push(`${$.plugin.name}: context is ${k(s.ctx)} per turn. Finish the current step, update the handover state, run the retro skill, and tell the user to start a fresh session.`)
@@ -351,9 +380,22 @@ export const register: Register = (on, options) => {
       const history = ((await $.store.get(HISTORY_KEY)) ?? []) as SessionSummary[]
       const row: SessionSummary = { at: await $.clock.now(), turns: s.turns, ctx: s.ctx, calls: s.calls, agents: s.agents, denies: s.denies, writeShare }
       await $.store.set(HISTORY_KEY, [...history, row].slice(-30))
+      const coached = ((await $.store.get(COACH_KEY)) ?? []) as CoachRow[]
+      await $.store.set(COACH_KEY, [...coached, { at: row.at, hits: coach.hits(), flagged: coach.flagged() }].slice(-30))
     }
+    coach.reset()
+    reads.clear()
+    spawned = 0
+    prChecked = false
+    prNudge = undefined
+    lastTurnAt = 0
     return next(e)
   }).catch(($, e, next) => next(e))
+
+  on('command.run', { command: 'coach' }, async $ => {
+    const history = ((await $.store.get(COACH_KEY)) ?? []) as CoachRow[]
+    return { text: coachReport(history, coach.hits(), coach.flagged(), off) }
+  })
 
   on('command.run', { command: 'prune' }, async $ => {
     const used = ((await $.store.get(USED_KEY)) ?? {}) as Record<string, number>
