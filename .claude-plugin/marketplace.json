@@ -9,5 +9,6 @@
       "source": "./",
       "description": "Token-efficient, self-improving Claude Code workflow: usage guards, model rungs, code map, orient and gate scripts, retro."
     }
-  ]
+  ],
+  "description": "Token-efficient, self-improving Claude Code workflow: usage guards, model rungs, code map, orient and gate scripts, retro."
 }
