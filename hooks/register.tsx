@@ -18,6 +18,8 @@ const AUTOPILOT = [
   '- Batch independent tool calls; grep then read line ranges; one retry per new hypothesis.',
 ].join('\n')
 const REPEAT_LIMIT = 3
+// Only tools whose identical repeat means a stuck loop; inbox and status reads repeat by design.
+const LOOP_TOOLS = new Set(['Bash', 'Read', 'Grep', 'Glob', 'Edit', 'Write', 'WebFetch', 'WebSearch'])
 const BIG_CONTEXT = 150_000
 const BIG_OUTPUT = 20_000
 const COLD_MS = 55 * 60 * 1000 // the 1h prompt cache is about to expire
@@ -221,8 +223,8 @@ export const register: Register = (on, options) => {
       return next(e)
     }
     turnCalls += 1
-    const key = JSON.stringify(args)
-    repeats = key === lastKey ? repeats + 1 : 1
+    const key = LOOP_TOOLS.has(e.tool) ? JSON.stringify(args) : ''
+    repeats = key && key === lastKey ? repeats + 1 : 1
     lastKey = key
     const s = await update($, statsA, x => ({ ...x, calls: x.calls + 1, denies: x.denies + (repeats >= REPEAT_LIMIT ? 1 : 0) }))
     $.ui.status(label(s))
