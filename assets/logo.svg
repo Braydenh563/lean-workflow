@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="150" viewBox="0 0 640 150" role="img" aria-labelledby="t d">
+  <title id="t">lean-workflow</title>
+  <desc id="d">Three horizontal bars that shorten from top to bottom, with a small amber mark at the end of the shortest, beside the name lean-workflow.</desc>
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#2DD4BF"/>
+      <stop offset="1" stop-color="#38BDF8"/>
+    </linearGradient>
+    <style>
+      .name { fill: #0B1220; }
+      .tag  { fill: #475569; }
+      @media (prefers-color-scheme: dark) {
+        .name { fill: #F1F5F9; }
+        .tag  { fill: #94A3B8; }
+      }
+    </style>
+  </defs>
+  <rect x="10" y="11" width="128" height="128" rx="30" fill="#0B1220"/>
+  <rect x="34" y="40" width="80" height="15" rx="7.5" fill="url(#g)"/>
+  <rect x="34" y="67.5" width="56" height="15" rx="7.5" fill="url(#g)" opacity="0.85"/>
+  <rect x="34" y="95" width="32" height="15" rx="7.5" fill="url(#g)" opacity="0.7"/>
+  <circle cx="82" cy="102.5" r="7.5" fill="#FBBF24"/>
+  <text class="name" x="168" y="80" font-family="Inter, 'Segoe UI', system-ui, -apple-system, sans-serif" font-size="46" font-weight="700" letter-spacing="-1">lean-workflow</text>
+  <text class="tag" x="170" y="110" font-family="Inter, 'Segoe UI', system-ui, -apple-system, sans-serif" font-size="19">Fewer tokens per task. The checks stay.</text>
+</svg>
