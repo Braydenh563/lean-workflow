@@ -2,3 +2,5 @@ __pycache__/
 .gate/
 node_modules/
 .claude/work-order.count
+.claude/work-order.last
+.claude/inputs/

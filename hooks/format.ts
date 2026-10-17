@@ -1,6 +1,8 @@
 import type { AgentRow, Stats, TaskRow } from '../types'
+import { TIER_LIMITS } from './tier'
 
 export type CostRow = { model: string; share: number; turns: number; out: number }
+export type LimitsView = { tier: string; tierReason: string; mode?: string; weekTrend: string }
 export type DashInput = {
   stats: Stats
   agents: AgentRow[]
@@ -11,6 +13,7 @@ export type DashInput = {
   advice: string
   trend: string
   bigContext: number
+  limits: LimitsView
 }
 
 const WIDTH = 20
@@ -28,6 +31,27 @@ export function bar(frac: number, width = WIDTH): string {
 
 function pct(share: number): string {
   return `${Math.round(share * 100)}%`
+}
+
+const SPARK = '▁▂▃▄▅▆▇█'
+
+// One block per value, 0 to 100 percent.
+export function spark(values: number[]): string {
+  return values.map(v => SPARK[Math.min(7, Math.max(0, Math.floor((Math.min(100, Math.max(0, v)) / 100) * 8)))]).join('')
+}
+
+// The weekly figure read at the end of each stored session, then now: a line you can see drift.
+export function weekTrend(history: readonly { week?: number }[], current?: number): string {
+  const points = [...history.map(h => h.week), current].filter((v): v is number => typeof v === 'number').slice(-12)
+  if (points.length < 2) return 'week trend: needs 2 readings (one is stored at the end of each session)'
+  const delta = points[points.length - 1] - points[0]
+  return `week trend ${spark(points)} ${points[0]}% → ${points[points.length - 1]}% over ${points.length} readings (${delta >= 0 ? '+' : ''}${delta})`
+}
+
+function limitLine(name: string, pct: number | undefined, extra = ''): string {
+  if (pct === undefined) return `  ${name}  not reported by this host`
+  const level = pct >= TIER_LIMITS.stopWeek ? '🔴' : pct >= TIER_LIMITS.proWeek ? '🟡' : '🟢'
+  return `  ${name}  ${level} ${bar(pct / 100)} ${pct}%${extra}`
 }
 
 // Plain unicode, no markdown and no column alignment, so it reads the same in a terminal and in a proportional-font chat.
@@ -49,6 +73,12 @@ export function dashText(d: DashInput): string {
     rule('Context per turn'),
     `  ${level} ${bar(s.ctx / (d.bigContext * 4 / 3))} ${k(s.ctx)} of ${k(d.bigContext)} budget`,
     `  ${d.trend}`,
+    '',
+    rule('Limits (live from the host)'),
+    limitLine('5-hour', s.fiveHour),
+    limitLine('weekly', s.week, s.weekResets ? ` · resets ${s.weekResets.slice(0, 16).replace('T', ' ')}` : ''),
+    `  ${d.limits.weekTrend}`,
+    `  tier ${d.limits.tier} (${d.limits.tierReason})${d.limits.mode ? ` · mode ${d.limits.mode}` : ''}`,
     '',
     rule('Activity'),
     `  ${s.turns} turns · ${s.calls} tool calls · ${s.agents} agents · ${s.denies} blocked`,

@@ -14,4 +14,5 @@ jobs:
       - run: pip install pytest
       - run: bash -n skills/lean-setup/templates/orient.sh && bash -n skills/lean-setup/templates/gate.sh && bash -n scripts/keep-going.sh
       - run: python -c "import json,glob;[json.load(open(f)) for f in glob.glob('.claude-plugin/*.json')]"
+      - run: python -m py_compile scripts/item_ledger.py skills/upgrade-scan/scan.py
       - run: python -m pytest -q tests

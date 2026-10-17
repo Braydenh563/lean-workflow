@@ -90,6 +90,9 @@ Tier: `max` (set `pro` on the Pro plan). Fast checks: [the repo's commands].
    triage once handled; under 20). Sessions read it first and update it at
    each milestone, instead of re-exploring. The plugin warns when it or
    CLAUDE.md passes its size limit.
+5b. Add to `.gitignore` (skipping lines already there):
+   `.claude/work-order.count`, `.claude/work-order.last` and `.claude/inputs/`
+   (run state and the text copies of document inputs).
 6. If `.claude/agents/` lacks them and the plugin's agents are not
    installed, copy `scout`, `reviewer`, `ux-auditor` and `blind-tester`
    from this plugin's `agents/` folder.

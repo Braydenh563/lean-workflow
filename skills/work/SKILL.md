@@ -11,7 +11,7 @@ the order file, and carry on. Never use Fable unless the user named it.
 
 ## Start (one turn, under 5 tool calls)
 
-1. Commit and push anything open. `rm -f .claude/work-order.count`.
+1. Commit and push anything open. `rm -f .claude/work-order.count .claude/work-order.last` (the call counter and the no-commit clock).
 2. Write `.claude/work-order.md` (gitignored or committed, the repo's call):
 
    ```
@@ -19,6 +19,7 @@ the order file, and carry on. Never use Fable unless the user named it.
    status: active        # active | done | stopped (<why>) | blocked (<why>)
    pr: 190               # ship only
    max-continues: 40     # the Stop hook's cap on automatic continues
+   max-idle-minutes: 60  # the Stop hook ends the run after this long with no new commit
    started: 2026-10-17 22:10
 
    - [ ] first item
@@ -30,6 +31,40 @@ the order file, and carry on. Never use Fable unless the user named it.
 The plugin's Stop hook refuses to end the turn while `status: active` and
 hands back the next unticked item. Tick each item (`- [x]`) as it lands and
 add new ones as you find them; `/progress` shows the bars.
+
+## Guards while an order is active
+
+The plugin enforces these for the main thread and every agent; a refused call
+says why. Do not work around them: mark the item `[!]` with what you wanted and
+move on.
+
+- No force-push (`--force`, `--force-with-lease`, `-f`, `+ref`). Merge the
+  remote in instead.
+- No edits to CI definitions (`.github/workflows`, `.gitlab-ci.yml`,
+  `.circleci`, `Jenkinsfile`, ...) or Claude settings
+  (`.claude/settings*.json`). Read them; the change is the user's.
+- No commit for 60 minutes (`max-idle-minutes`): the Stop hook sets
+  `status: stopped (no commit in 60 minutes)`. Commit each step, even a
+  small one.
+- A document input (PDF, Word, Excel, PowerPoint) is read once. Right after
+  that read, save the text you need to `.claude/inputs/<file>.txt` (keep it
+  out of commits) and use that copy for every later look; a second read of
+  the document is refused. If a converter exists (`pdftotext`), convert
+  first and read the text. If the `headroom` plugin is installed, its `peek`
+  skill outlines a long copy so only the needed parts are read.
+- At the weekly finish-up line (default 85%, or the user's own) the plugin
+  sets `status: stopped (usage)`.
+
+## Rungs by task type
+
+Each finished item is recorded with the rung that did it; `upgrade-scan` moves
+a type between rungs when its ledger shows repeated rework (or none).
+
+| Task type | Starting rung |
+| --- | --- |
+| `lookup`, `mechanical` | haiku |
+| `feature`, `bug`, `refactor`, `ui`, `docs`, `test`, `release` | sonnet |
+| `design`, `security`, `review` | opus (medium effort) |
 
 ## ship: drive one PR to merged
 
@@ -64,6 +99,12 @@ before push, one commit per step, `reviewer` on risky changes. A PR every 3
 to 5 items; fix its CI before moving on; do not merge unless the user's order
 said so.
 
+After each item (and after its reviewer pass, so rework is known), record it:
+`python "${CLAUDE_PLUGIN_ROOT}/scripts/item_ledger.py" add --type <type> --rung <haiku|sonnet|opus> --rework <n> "<item>"`.
+`--rework` is the number of rounds the item came back after its first done:
+a confirmed reviewer finding, a red CI caused by it, a fix that returned. It
+writes `.claude/item-ledger.md`; commit it with the item.
+
 After every 3 items, or when the queue is empty, run the next scan in this
 rotation and add what it confirms to the checklist (the scan agent reports;
 you fix):
@@ -88,6 +129,7 @@ Claims about UI need a number from the running app.
   `status: stopped (usage)`.
 - An item failed twice with new evidence: mark it `[!]` with the evidence,
   move on. Three blocked items in a row: `status: blocked (<why>)`.
+- No commit for 60 minutes: the Stop hook ends the run (`stopped (no commit in 60 minutes)`).
 - ship done, or continue with nothing left after a full scan rotation:
   `status: done`.
 

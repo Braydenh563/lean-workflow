@@ -1,6 +1,7 @@
 """upgrade-scan's evidence helpers, and the rules its SKILL.md promises."""
 
 import importlib.util
+import json
 import re
 from pathlib import Path
 
@@ -58,3 +59,85 @@ def test_routing_table_has_no_fable_rung():
     assert not re.search(r"RATE[^\n]*fable", coach, re.I)
     for agent in (ROOT / "agents").glob("*.md"):
         assert not re.search(r"^model:\s*fable", agent.read_text(), re.I | re.M), agent.name
+
+
+CHANGELOG = """# Changelog
+
+## 2.1.302
+
+- Added `CLAUDE_CODE_AUTO_MODE_MODEL` to choose the classifier model
+- Fixed a prompt cache miss when a tool added mid-session was loaded again
+- Fixed rows in the agents view staying blank after moving down a long list
+- Fixed the spinner colour
+
+## 2.1.300
+
+- Added a `userConfig` field type to plugin manifests
+- Fixed hooks not firing in a worktree
+
+## 2.1.299
+
+- Fixed the Stop hook running twice
+"""
+
+NOTES = """# Claude Platform release notes
+
+### October 15, 2026
+
+* [Fast mode](https://example.com/#claude-managed-agents) is out of research preview for Claude Opus 5.5.
+* The [Compliance API](https://example.com/x) returns user preferences.
+
+### October 9, 2026
+
+* Claude Haiku 4 is deprecated and retires on January 5, 2027.
+* New dashboard colours.
+
+### October 1, 2026
+
+* Pricing for Sonnet changed to $3 per million input tokens.
+"""
+
+
+def test_changelog_keeps_only_versions_after_since_and_only_lines_that_touch_the_plugin():
+    r = scan.parse_changelog(CHANGELOG, since="2.1.299")
+    assert r["newest"] == "2.1.302"
+    assert [v["version"] for v in r["versions"]] == ["2.1.302", "2.1.300"]
+    lines = [h["line"] for v in r["versions"] for h in v["hits"]]
+    assert any("prompt cache miss" in l for l in lines)
+    assert any("agents view" in l for l in lines)  # an agents line is in scope; a spinner colour is not
+    assert not any("spinner" in l for l in lines)
+    assert not any("Stop hook running twice" in l for l in lines)  # 2.1.299 is not after 2.1.299
+    assert scan.parse_changelog(CHANGELOG)["scanned"] == 3
+
+
+def test_changelog_topics_name_why_a_line_matters():
+    hits = scan.parse_changelog(CHANGELOG, since="2.1.299")["versions"][1]["hits"]
+    assert {t for h in hits for t in h["topics"]} >= {"plugins", "hooks"}
+
+
+def test_release_notes_keep_model_price_and_retirement_lines_after_the_date():
+    r = scan.parse_notes(NOTES, since="2026-10-01")
+    assert r["newest"] == "2026-10-15"
+    assert [e["date"] for e in r["entries"]] == ["2026-10-15", "2026-10-09"]
+    flat = " ".join(h for e in r["entries"] for h in e["hits"])
+    assert "Claude Opus 5.5" in flat and "retires" in flat
+    assert "Compliance API" not in flat and "dashboard colours" not in flat
+    assert "example.com" not in flat  # link addresses are dropped
+
+
+def test_release_notes_link_targets_do_not_count_as_a_model_mention():
+    r = scan.parse_notes("### October 15, 2026\n\n* The [Platform](https://x/claude-managed-agents) changed.\n")
+    assert r["entries"] == []
+
+
+def test_last_scan_file_names_the_sources_and_the_baseline():
+    last = json.loads((SKILL / "last-scan.json").read_text())
+    assert last["claude_code"] and last["notes"]
+    assert last["sources"]["claude_code_changelog"].endswith("anthropics/claude-code/main/CHANGELOG.md")
+    assert last["sources"]["anthropic_release_notes"].startswith("https://platform.claude.com/docs/en/release-notes")
+
+
+def test_skill_reads_both_release_sources_with_the_helpers():
+    text = (SKILL / "SKILL.md").read_text()
+    for part in ("scan.py changelog", "scan.py notes", "scan.py items", "last-scan.json", "item-ledger"):
+        assert part in text, part

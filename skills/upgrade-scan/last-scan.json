@@ -1,0 +1,8 @@
+{
+ "claude_code": "2.1.302",
+ "notes": "2026-10-15",
+ "sources": {
+  "claude_code_changelog": "https://raw.githubusercontent.com/anthropics/claude-code/main/CHANGELOG.md",
+  "anthropic_release_notes": "https://platform.claude.com/docs/en/release-notes/overview.md"
+ }
+}
