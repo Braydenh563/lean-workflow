@@ -25,7 +25,8 @@ description: Set up the lean, self-improving workflow in the current repo, once 
 Tier: `max` (set `pro` on the Pro plan). Fast checks: [the repo's commands].
 
 - Cost is turns times context. Batch independent tool calls; grep, then
-  read line ranges; start a fresh session at each milestone with the state
+  read line ranges (`wc -c` before a read; never `cat` several files in one
+  command: a 20k-character output rides in every later turn); start a fresh session at each milestone with the state
   in this file or a handover note; crop or avoid screenshots; no idle gaps
   over an hour in a long session.
 - Rungs: Haiku (`scout`) for lookup and mechanical work with a runnable
