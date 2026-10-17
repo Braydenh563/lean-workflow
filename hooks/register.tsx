@@ -22,6 +22,7 @@ const AUTOPILOT = [
   '- If scripts/orient.sh exists, run it first in a session. If scripts/gate.sh exists, run it before every push. If docs/CODEMAP.md exists, grep it before opening source files.',
   '- Agents keep a remaining-work file and commit at least every 20 minutes. Tests take a fixed "now" instead of reading the clock. A claim about how a UI looks needs a measurement from the running app.',
   '- Batch independent tool calls; grep then read line ranges; one retry per new hypothesis.',
+  '- When the user says they are going to sleep, to work, out or away, or asks for work while they are gone, run the away skill: work the queue unattended, never stop to ask, stop before the limits, leave a summary.',
 ].join('\n')
 // Files that ride in every session's context: a size limit keeps them lean.
 const DEFAULT_CLAUDE_MD_MAX = 200

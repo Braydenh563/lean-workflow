@@ -91,6 +91,7 @@ Nine habits are watched. Each nudge shows **once per session** (at most two per 
 - `lean-setup` installs the files in the next section.
 - `retro` measures the session, appends one ledger line and changes at most one rule, and only when the same signal appears in two or more lines.
 - `upgrade-scan` is a weekly routine for this repo's maintainer. It reads the retro ledgers, Anthropic model and Claude Code release notes and the plugin API types (diffed against `api-snapshot.json`), and proposes routing-table and hook updates in one PR with a quote or ledger lines as evidence for each. It never merges and never routes to Fable. Run it as a scheduled task or by hand.
+- `away` runs when you say you are going to sleep, to work or away: it writes the queue and handover, works item by item (Haiku scouts, Sonnet builds, a reviewer checks), opens a PR every 3 to 5 items, stops at 85% of the weekly limit, and leaves an 8-line summary for your phone. No keep-warm pings: Claude Code's idle compaction already shrinks the context before the hour-long cache expires.
 - Agents: `scout` (read-only finder, Haiku), `reviewer` (independent diff check), `ux-auditor`, `blind-tester`.
 
 ## What `lean-setup` adds to a repo
