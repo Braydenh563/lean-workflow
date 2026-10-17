@@ -61,7 +61,7 @@ files below. A repo that already has the workflow is left alone.
 
 ### Habit coach
 
-Seven habits are watched. Each nudge shows **once per session** (at most two per prompt), names the cheaper alternative and gives an estimated saving. Savings are in token-equivalents (plain input = 1; cache reads 0.1, writes 2, output 5) from the assumptions in `hooks/coach.ts`, not measured spend.
+Nine habits are watched. Each nudge shows **once per session** (at most two per prompt), names the cheaper alternative and gives an estimated saving. Savings are in token-equivalents (plain input = 1; cache reads 0.1, writes 2, output 5) from the assumptions in `hooks/coach.ts`, not measured spend.
 
 | Habit | Fires when | Cheaper alternative |
 | --- | --- | --- |
@@ -72,8 +72,10 @@ Seven habits are watched. Each nudge shows **once per session** (at most two per
 | Images | 2 or more images, or one over 1 MB | Crop to the problem, or state the numbers |
 | Idle gap | 55 minutes since the last turn (the prompt cache has likely expired) | Fresh session from the handover |
 | Weekly limit | The `seven_day` window is 70% used, or 50% used and 20 points ahead of an even burn | Cheaper rungs; big runs wait for the reset |
+| Re-reads | The same file read whole 3 times (a ranged read does not count) | Put the facts in `now.md`, or grep and read a line range |
+| Agent fan-out | 4 or more `Agent` calls in one prompt | One haiku scout to locate, then at most two builders |
 
-`/coach` reports each habit's count this session and in your stored sessions (the last 30), and the trend: the older half of those sessions against the newer half, once there are four. Nudges only advise; the one denial remains the unnamed-agent guard. The coach never suggests Fable.
+`/coach` reports each habit's count this session and in your stored sessions (the last 30), the estimated tokens the nudges flagged (what they pointed at, not spend saved), and the trend: the older half of those sessions against the newer half, once there are four. Nudges only advise; the one denial remains the unnamed-agent guard. The coach never suggests Fable.
 
 ### Commands
 
@@ -122,10 +124,11 @@ Set under the plugin's options.
 | `grepOnly` | code maps, histories, changelogs, lockfiles, `.min.js`, `.map` | Regex of paths that must not be read whole |
 | `claudeMdMaxLines` | 200 | Warn when `CLAUDE.md` is read whole or written past this |
 | `nowMaxLines` | 60 | Same for `.claude/now.md` |
+| `coachOff` | empty | Comma-separated habits the coach should not count or show, e.g. `bigImage, idleGap` |
 
 ## Status and limits
 
-- Coach savings are estimates built on stated assumptions (20 turns of carry, 800 tokens per commit diff, 1,500 per image, relative prices haiku 1 : sonnet 3 : opus 5). `upgrade-scan` re-checks the prices; treat the numbers as a ranking of habits, not a bill.
+- Coach savings are estimates built on stated assumptions (20 turns of carry, 800 tokens per commit diff, 1,500 per image, 15k to start an agent, 50k per agent run, relative prices haiku 1 : sonnet 3 : opus 5). `upgrade-scan` re-checks the prices; treat the numbers as a ranking of habits, not a bill.
 - Usage figures are the plugin's own counts of the session's token usage, weighted by relative price (reads 0.1, input 1, writes 2, output 5). They are ratios for comparison, not plan usage or money.
 - The guards and templates are tested (`claude plugin test .`, `pytest tests`). Whether the rules save tokens in your repo is something to read off your own ledger; one session proves nothing, which is why `retro` waits for repeats.
 - `codemap.py` reads Python with `ast` and JS/TS/Go with regular expressions, so it can miss unusual declaration styles. It maps top-level and exported definitions only.

@@ -2,10 +2,18 @@ import { k } from './format'
 
 // Habit coach: pure rules. Each returns the nudge text (the cheaper alternative and an estimated saving) or undefined.
 // Savings are estimates in "token-equivalents" (plain input = 1) from the constants below, never measured spend.
-export type Habit = 'longSession' | 'longPr' | 'agentModel' | 'bigPaste' | 'bigImage' | 'idleGap' | 'weeklyLimit'
-export const HABITS: Habit[] = ['longSession', 'longPr', 'agentModel', 'bigPaste', 'bigImage', 'idleGap', 'weeklyLimit']
-export type Nudge = { habit: Habit; text: string; repeat?: boolean }
-export type CoachRow = { at: number; hits: Partial<Record<Habit, number>> }
+export type Habit = 'longSession' | 'longPr' | 'agentModel' | 'bigPaste' | 'bigImage' | 'idleGap' | 'weeklyLimit' | 'reread' | 'fanOut'
+export const HABITS: Habit[] = ['longSession', 'longPr', 'agentModel', 'bigPaste', 'bigImage', 'idleGap', 'weeklyLimit', 'reread', 'fanOut']
+// save: estimated token-equivalents the cheaper alternative would avoid (what /coach totals as "flagged").
+export type Nudge = { habit: Habit; text: string; repeat?: boolean; save?: number }
+export type Tally = Partial<Record<Habit, number>>
+export type CoachRow = { at: number; hits: Tally; flagged?: Tally }
+
+// Habits named in the coachOff option, ignoring anything that is not a habit.
+export function parseOff(raw: unknown): Set<Habit> {
+  const names = String(raw ?? '').split(/[\s,]+/)
+  return new Set(HABITS.filter(h => names.some(n => n.toLowerCase() === h.toLowerCase())))
+}
 
 export const W = { input: 1, reads: 0.1, writes: 2, output: 5 }
 // Relative price per token by rung (ratios only; upgrade-scan re-checks them against the pricing page).
@@ -22,11 +30,16 @@ export const LIMITS = {
   idleMs: 55 * 60 * 1000,
   weeklyPct: 70,
   weeklyAhead: 20,
+  rereads: 3,
+  fanOut: 4,
 }
 const FRESH_CTX = 20_000 // what a fresh session starts with once the handover is read
 const HORIZON = 20 // turns a carried item is assumed to ride along
 const COMMIT_TOKENS = 800 // assumed size of one commit's diff when a PR is re-reviewed
 const IMAGE_TOKENS = 1_500 // assumed cost of one image (the API caps near this)
+const AGENT_RUN = 50_000 // assumed token-equivalents of one subagent run, for pricing a rung change
+const AGENT_START = 15_000 // assumed tokens an agent spends orienting before it does useful work
+const REREAD_TOKENS = 2_000 // assumed size of a re-read file when its text is not visible
 const WEEK_MS = 7 * 24 * 3600_000
 
 // Cost of keeping `tokens` in context for HORIZON turns: written once, read after.
@@ -46,6 +59,7 @@ export function longSession(a: { ageMs: number; turns: number; ctx: number }): N
   const why = `${(a.ageMs / 3600_000).toFixed(1)} h, ${a.turns} turns, context ${k(a.ctx)}`
   return {
     habit: 'longSession',
+    save,
     text: `Long session (${why}). Cheaper: update the handover Now line, run retro, start a fresh session${save > 0 ? `; saves about ${k(save)} token-equivalents of cache reads over the next ${HORIZON} turns (estimate)` : ''}.`,
   }
 }
@@ -56,6 +70,7 @@ export function longPr(a: { branch: string; commits: number; ageMs: number }): N
   const save = a.commits * COMMIT_TOKENS * 0.5
   return {
     habit: 'longPr',
+    save,
     text: `Branch ${a.branch} is ${days.toFixed(1)} days old with ${a.commits} commits. Cheaper: merge what is done and open the rest as a second small PR; each review round re-reads the diff, and halving it saves about ${k(save)} tokens per round (estimate).`,
   }
 }
@@ -76,6 +91,7 @@ export function agentModel(a: { model?: string; type?: string; prompt: string })
   return {
     habit: 'agentModel',
     repeat: true,
+    save: (AGENT_RUN * cut) / 100,
     text: `Agent "${a.type ?? 'general-purpose'}" ran on ${have} for a ${simple ? 'lookup-sized' : 'no-judgement'} task. Cheaper: model ${want} for the next one like it; about ${cut}% less per token on that call (relative list price, estimate).`,
   }
 }
@@ -86,6 +102,7 @@ export function bigPaste(chars: number): Nudge | undefined {
   return {
     habit: 'bigPaste',
     repeat: true,
+    save: carry(tokens) * 0.9,
     text: `Pasted ${k(chars)} characters (about ${k(tokens)} tokens) that now ride along every turn. Cheaper: save it to a file and have Claude grep it and read a line range; about ${k(carry(tokens) * 0.9)} token-equivalents over ${HORIZON} turns (estimate).`,
   }
 }
@@ -97,6 +114,7 @@ export function bigImage(a: { count: number; bytes?: number }): Nudge | undefine
   return {
     habit: 'bigImage',
     repeat: true,
+    save: carry(a.count * (IMAGE_TOKENS - 100)),
     text: `${a.count} image${a.count > 1 ? 's' : ''}${size} stay in context on every later turn. Cheaper: crop to the problem, or state the numbers; about ${k(carry(a.count * (IMAGE_TOKENS - 100)))} token-equivalents over ${HORIZON} turns (estimate).`,
   }
 }
@@ -107,7 +125,32 @@ export function idleGap(a: { idleMs: number; ctx: number }): Nudge | undefined {
   return {
     habit: 'idleGap',
     repeat: true,
+    save,
     text: `Idle ${Math.round(a.idleMs / 60000)} min: the prompt cache has likely expired, so this turn re-caches ${k(a.ctx)} tokens. Cheaper: start a fresh session from the handover; saves about ${k(save)} token-equivalents of cache writes (estimate).`,
+  }
+}
+
+// The same file read whole again: each read lands in context again and rides along.
+export function reread(a: { path: string; count: number; chars?: number }): Nudge | undefined {
+  if (a.count < LIMITS.rereads) return undefined
+  const tokens = a.chars ? Math.round(a.chars / 4) : REREAD_TOKENS
+  const save = carry(tokens) * (a.count - 1)
+  return {
+    habit: 'reread',
+    repeat: true,
+    save,
+    text: `${a.path} has been read whole ${a.count} times. Cheaper: write the few facts you need into now.md, or grep it and read a line range; about ${k(save)} token-equivalents over ${HORIZON} turns (estimate).`,
+  }
+}
+
+// Many agents in one prompt: each pays to orient before it does anything.
+export function fanOut(spawned: number): Nudge | undefined {
+  if (spawned < LIMITS.fanOut) return undefined
+  const save = (spawned - 2) * AGENT_START * W.writes
+  return {
+    habit: 'fanOut',
+    save,
+    text: `${spawned} agents started in one prompt, each reading the repo from scratch. Cheaper: one haiku scout to locate the files, then at most two builders with the paths in their briefs; about ${k(save)} token-equivalents of start-up (estimate).`,
   }
 }
 
@@ -130,15 +173,20 @@ export function weeklyLimit(limits: readonly Limit[], now: number): Nudge | unde
 }
 
 // Once-per-session delivery. A state-like habit counts one hit a session; a repeat habit counts every occurrence.
-export function makeCoach() {
-  let hits: Partial<Record<Habit, number>> = {}
+// Habits in `off` are never counted or shown.
+export function makeCoach(off: ReadonlySet<Habit> = new Set()) {
+  let hits: Tally = {}
+  let flagged: Tally = {}
   let shown = new Set<Habit>()
   return {
     offer(nudges: (Nudge | undefined)[], max = 2): string[] {
       const out: string[] = []
       for (const n of nudges) {
-        if (!n) continue
-        if (n.repeat || !hits[n.habit]) hits[n.habit] = (hits[n.habit] ?? 0) + 1
+        if (!n || off.has(n.habit)) continue
+        if (n.repeat || !hits[n.habit]) {
+          hits[n.habit] = (hits[n.habit] ?? 0) + 1
+          flagged[n.habit] = (flagged[n.habit] ?? 0) + Math.round(n.save ?? 0)
+        }
         if (shown.has(n.habit) || out.length >= max) continue
         shown.add(n.habit)
         out.push(n.text)
@@ -146,8 +194,10 @@ export function makeCoach() {
       return out
     },
     hits: () => ({ ...hits }),
+    flagged: () => ({ ...flagged }),
     reset() {
       hits = {}
+      flagged = {}
       shown = new Set()
     },
   }
@@ -161,17 +211,22 @@ const NAMES: Record<Habit, string> = {
   bigImage: 'image-heavy prompts',
   idleGap: 'idle gaps over an hour',
   weeklyLimit: 'weekly limit pressure',
+  reread: 'whole-file re-reads',
+  fanOut: 'agent fan-out',
 }
 
 // Counts per habit across stored sessions, and older half vs newer half as the trend (4 sessions needed).
-export function coachReport(history: readonly CoachRow[], now: Partial<Record<Habit, number>>): string {
+// "flagged" is the estimated token-equivalents the nudges pointed at, not spend that was saved.
+export function coachReport(history: readonly CoachRow[], now: Tally, nowFlagged: Tally = {}, off: ReadonlySet<Habit> = new Set()): string {
   const n = history.length
   const sum = (rows: readonly CoachRow[], h: Habit) => rows.reduce((a, r) => a + (r.hits[h] ?? 0), 0)
   const old = history.slice(0, Math.floor(n / 2))
   const recent = history.slice(Math.floor(n / 2))
   const lines = [`coach: ${n} earlier session${n === 1 ? '' : 's'} recorded${n < 4 ? '; a trend needs 4' : ''}`]
   for (const h of HABITS) {
+    if (off.has(h)) continue
     const total = sum(history, h)
+    const flagged = history.reduce((a, r) => a + (r.flagged?.[h] ?? 0), 0) + (nowFlagged[h] ?? 0)
     let tr = ''
     if (n >= 4) {
       const a = sum(old, h) / old.length
@@ -179,8 +234,9 @@ export function coachReport(history: readonly CoachRow[], now: Partial<Record<Ha
       tr = b < a ? ' · trend better' : b > a ? ' · trend worse' : ' · trend flat'
       tr += ` (${a.toFixed(1)} → ${b.toFixed(1)} per session)`
     }
-    lines.push(`${NAMES[h]}: ${now[h] ?? 0} now · ${total} in history${tr}`)
+    lines.push(`${NAMES[h]}: ${now[h] ?? 0} now · ${total} in history${flagged ? ` · flagged ≈${k(flagged)}` : ''}${tr}`)
   }
+  if (off.size) lines.push(`off: ${[...off].join(', ')}`)
   return lines.join('\n')
 }
 

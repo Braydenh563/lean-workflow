@@ -1,6 +1,6 @@
 import { test, expect } from 'claude-code/testing'
 
-import { bigImage, bigPaste, coachReport, idleGap, longPr, longSession, makeCoach, weeklyLimit } from './coach'
+import { bigImage, bigPaste, coachReport, idleGap, longPr, longSession, makeCoach, parseOff, weeklyLimit } from './coach'
 
 const HOUR = 3600_000
 const NOW = 1_800_000_000_000
@@ -170,4 +170,50 @@ test('coachReport asks for 4 sessions before showing a trend', () => {
   expect(text).toContain('a trend needs 4')
   expect(text).not.toContain('trend better')
   expect(longSession({ ageMs: HOUR, turns: 3, ctx: 10_000 })).toBeUndefined()
+})
+
+test('re-read: the third whole read of a file points at now.md or a line range', async ($, on) => {
+  on('tool.call', () => ({ result: 'ok', text: 'x'.repeat(8000) }) as never)
+  on('ui.status', () => ({ value: undefined }) as never)
+  const read = (file_path: string, extra = {}) => $.tool.call({ tool: 'Read', file_path, ...extra } as never)
+  let last = await read('src/a.ts')
+  for (const p of ['src/b.ts', 'src/a.ts', 'src/b.ts']) last = await read(p)
+  expect(last.context ?? []).toHaveLength(0)
+  last = await read('src/a.ts')
+  expect(JSON.stringify(last.context)).toContain('src/a.ts has been read whole 3 times')
+  expect(JSON.stringify(last.context)).toContain('now.md')
+  const ranged = await read('src/c.ts', { limit: 40 })
+  expect(ranged.context ?? []).toHaveLength(0)
+})
+
+test('fan-out: the fourth agent in one prompt suggests a scout and two builders', async ($, on) => {
+  on('tool.call', () => ({ result: 'ok' }) as never)
+  on('ui.status', () => ({ value: undefined }) as never)
+  let r
+  for (let i = 0; i < 4; i++) r = await $.tool.call({ tool: 'Agent', description: `t${i}`, prompt: `build part ${i} of the thing`, subagent_type: 'general-purpose', model: 'sonnet' } as never)
+  expect(JSON.stringify(r!.context)).toContain('4 agents started in one prompt')
+  expect(JSON.stringify(r!.context)).toContain('haiku scout')
+})
+
+test('coachOff silences a habit: not shown and not counted', { options: { coachOff: 'bigPaste, idleGap' } }, async ($, on) => {
+  const { toasts, store } = wire(on)
+  await $.prompt.submit({ text: 'z'.repeat(40_000), ...base })
+  expect(toasts).toHaveLength(0)
+  const r = await $.command.run({ command: 'coach', args: '' } as never)
+  expect(r.text).toContain('off: bigPaste, idleGap')
+  expect(r.text).not.toContain('big pastes')
+  expect(store.size).toBe(0)
+})
+
+test('/coach totals what the nudges flagged, as an estimate', async ($, on) => {
+  const { toasts } = wire(on)
+  await $.prompt.submit({ text: 'z'.repeat(40_000), ...base })
+  expect(toasts).toHaveLength(1)
+  const r = await $.command.run({ command: 'coach', args: '' } as never)
+  expect(r.text).toMatch(/big pastes: 1 now · 0 in history · flagged ≈\d+k/)
+})
+
+test('parseOff keeps only real habits', () => {
+  expect([...parseOff('bigPaste, nonsense ,IDLEGAP')].sort()).toEqual(['bigPaste', 'idleGap'])
+  expect(parseOff(undefined).size).toBe(0)
 })

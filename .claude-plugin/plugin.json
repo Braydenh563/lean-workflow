@@ -25,6 +25,12 @@
       "title": "now.md line limit",
       "description": "Warn when .claude/now.md is read whole or written past this many lines.",
       "default": 60
+    },
+    "coachOff": {
+      "type": "string",
+      "title": "Habit coach: habits to silence",
+      "description": "Comma-separated habits the coach should not count or show: longSession, longPr, agentModel, bigPaste, bigImage, idleGap, weeklyLimit, reread, fanOut.",
+      "default": ""
     }
   }
 }
