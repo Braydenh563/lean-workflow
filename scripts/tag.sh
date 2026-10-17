@@ -3,13 +3,22 @@
 # commit of the current branch where that version first appeared. Safe to re-run; existing tags are kept.
 #   scripts/tag.sh            tag the current version locally
 #   scripts/tag.sh --push     ... and push the new tags
+#   scripts/tag.sh --version 1.5.0   tag that version (it must appear in plugin.json's history on this branch)
 #   scripts/tag.sh --all      also tag every earlier version found in the history (backfill)
 # bash, git, sed only.
 set -euo pipefail
-push=0; all=0
-for a in "$@"; do case "$a" in --push) push=1;; --all) all=1;; *) echo "usage: $0 [--all] [--push]" >&2; exit 2;; esac; done
+push=0; all=0; want=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --push) push=1;;
+    --all) all=1;;
+    --version) shift; want="${1#v}"; case "$want" in [0-9]*.[0-9]*.[0-9]*) ;; *) echo "--version needs X.Y.Z" >&2; exit 2;; esac;;
+    *) echo "usage: $0 [--version X.Y.Z] [--all] [--push]" >&2; exit 2;;
+  esac
+  shift
+done
 manifest=.claude-plugin/plugin.json
-ver_of() { sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1; }
+ver_of() { sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | sed -n 1p; }
 new=()
 tag_version() {  # version commit
   local tag="lean-workflow--v$1"
@@ -20,6 +29,7 @@ tag_version() {  # version commit
 }
 current=$(ver_of < "$manifest")
 [ -n "$current" ] || { echo "no version in $manifest" >&2; exit 1; }
+target=${want:-$current}
 if [ "$all" -eq 1 ]; then
   # oldest first, so each version lands on the commit that first carried it
   declare -A seen
@@ -28,7 +38,11 @@ if [ "$all" -eq 1 ]; then
     [ -n "${v:-}" ] && [ -z "${seen[$v]:-}" ] && { seen[$v]=1; tag_version "$v" "$c"; }
   done
 else
-  c=$(git log --first-parent --reverse --format=%H -S"\"version\": \"$current\"" -- "$manifest" | head -1)
-  tag_version "$current" "${c:-HEAD}"
+  c=$(git log --first-parent --reverse --format=%H -S"\"version\": \"$target\"" -- "$manifest" | sed -n 1p)
+  if [ -z "$c" ]; then
+    echo "version $target never appears in $manifest on this branch: raise it there in a PR first (current is $current)" >&2
+    exit 1
+  fi
+  tag_version "$target" "$c"
 fi
 if [ "$push" -eq 1 ] && [ "${#new[@]}" -gt 0 ]; then git push origin "${new[@]}"; fi
