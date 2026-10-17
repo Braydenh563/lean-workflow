@@ -28,7 +28,9 @@ jobs:
   tag:
     runs-on: ubuntu-latest
     env:
-      GH_TOKEN: ${{ github.token }}
+      # TAG_TOKEN (optional secret): a fine-grained token with Contents and Workflows read/write. GitHub refuses a tag
+      # from the default GITHUB_TOKEN when the tagged commit's history changes a file under .github/workflows.
+      GH_TOKEN: ${{ secrets.TAG_TOKEN || github.token }}
       INPUT_VERSION: ${{ inputs.version }}
       INPUT_RELEASE: ${{ inputs.release }}
       INPUT_BACKFILL: ${{ inputs.backfill }}
@@ -37,6 +39,7 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
+          token: ${{ secrets.TAG_TOKEN || github.token }}
       - name: Tag
         run: |
           git config user.name "github-actions[bot]"
