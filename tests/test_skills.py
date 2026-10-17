@@ -71,7 +71,7 @@ def test_the_idle_guard_default_matches_the_docs():
 def test_version_and_options_are_documented():
     plugin = json.loads((ROOT / ".claude-plugin" / "plugin.json").read_text())
     readme = (ROOT / "README.md").read_text()
-    assert plugin["version"] == "1.6.0"
+    assert plugin["version"] == "1.6.1"
     assert f"version-{plugin['version']}-" in readme
     for key in plugin["userConfig"]:
         assert f"`{key}`" in readme, key
