@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="68" viewBox="0 0 300 68" role="img" aria-labelledby="t">
+  <title id="t">lean-workflow</title>
+  <defs>
+    <style>
+      .name { fill: #0B1220; }
+      @media (prefers-color-scheme: dark) { .name { fill: #F1F5F9; } }
+    </style>
+  </defs>
+  <text class="name" x="150" y="48" text-anchor="middle" textLength="288" lengthAdjust="spacing"
+        font-family="Inter, 'Segoe UI', system-ui, -apple-system, sans-serif" font-size="42" font-weight="700">lean-workflow</text>
+</svg>
