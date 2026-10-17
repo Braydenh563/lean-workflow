@@ -12,7 +12,7 @@ export type AgentRow = {
 export type TaskRow = { id: string; subject: string; status: string }
 export type ModelCost = { turns: number; input: number; reads: number; writes: number; output: number }
 export type SessionSummary = { at: number; turns: number; ctx: number; calls: number; agents: number; denies: number; writeShare: number }
-export type Stats = { turns: number; calls: number; denies: number; ctx: number; agents: number }
+export type Stats = { turns: number; calls: number; denies: number; ctx: number; agents: number; ctxPct?: number; week?: number; fiveHour?: number; weekResets?: string }
 
 declare module 'claude-code' {
   interface PluginState {

@@ -46,7 +46,10 @@ function weighted(c: ModelCost): number {
 }
 
 function label(s: Stats): string {
-  return `ctx ${k(s.ctx)} · turns ${s.turns} · calls ${s.calls} · agents ${s.agents}`
+  const pct = s.ctxPct === undefined ? '' : ` (${s.ctxPct}%)`
+  const week = s.week === undefined ? '' : ` · week ${s.week}%`
+  const five = s.fiveHour === undefined ? '' : ` · 5h ${s.fiveHour}%`
+  return `ctx ${k(s.ctx)}${pct}${week}${five} · turns ${s.turns} · agents ${s.agents}`
 }
 
 // The single most useful next step, from this session's numbers.
@@ -55,6 +58,8 @@ function advice(s: Stats, costs: Record<string, ModelCost>): string {
   const writes = all.reduce((a, c) => a + c.writes * W.writes, 0)
   const total = all.reduce((a, c) => a + weighted(c), 0) || 1
   const opus = Object.entries(costs).filter(([m]) => /opus/.test(m)).reduce((a, [, c]) => a + weighted(c), 0)
+  if (s.week !== undefined && s.week >= 70) return `Weekly limit at ${s.week}%${s.weekResets ? ` (resets ${s.weekResets})` : ''}: work as tier pro until it resets: one agent, Sonnet, no Opus, short sessions.`
+  if (s.fiveHour !== undefined && s.fiveHour >= 80) return `5-hour window at ${s.fiveHour}%: commit and push now, finish the step, then start fresh after the reset.`
   if (s.ctx > BIG_CONTEXT) return `Context ${k(s.ctx)} per turn: update the HANDOVER "Now" line and start a fresh session at the next milestone.`
   if (writes > 0.4 * total && s.turns > 3) return 'Cache writes are over 40% of cost: avoid gaps over an hour, model switches and idle check-ins.'
   if (opus > 0.6 * total && s.agents > 0) return 'Opus is over 60% of cost: route labour to haiku and implementation to sonnet.'
@@ -100,6 +105,7 @@ export const register: Register = (on, options) => {
   const nowMax = Number(opts.nowMaxLines) || DEFAULT_NOW_MAX
   const sizeWarned = new Set<string>()
   let ctxNoted = false
+  let weekWarned = false
   // A turn's usage sums every model request in it; each main-thread tool call adds one.
   let turnCalls = 0
   const bigOutputs = new Set<string>()
@@ -200,8 +206,28 @@ export const register: Register = (on, options) => {
       await update($, agentsA, list => list.map(a => (a.id === e.agentId ? { ...a, endedAt: now, tokens: a.tokens + tokens } : a)))
     } else if (u) {
       lastTurnAt = await $.clock.now()
-      const ctx = Math.round((u.input_tokens + u.cache_read_input_tokens + u.cache_creation_input_tokens) / (turnCalls + 1))
-      const s = await update($, statsA, x => ({ ...x, turns: x.turns + 1, ctx }))
+      // The host's live figures beat any estimate: a turn's usage sums its requests.
+      let ctx = Math.round((u.input_tokens + u.cache_read_input_tokens + u.cache_creation_input_tokens) / (turnCalls + 1))
+      let live: Partial<Stats> = {}
+      try {
+        const usage = await $.session.usage()
+        if (usage.context.tokens !== undefined) ctx = usage.context.tokens
+        const week = usage.rateLimits.find(r => /seven|week/i.test(r.kind))
+        const five = usage.rateLimits.find(r => /five|5h/i.test(r.kind))
+        live = {
+          ctxPct: usage.context.percent === undefined ? undefined : Math.round(usage.context.percent),
+          week: week === undefined ? undefined : Math.round(week.percentUsed),
+          fiveHour: five === undefined ? undefined : Math.round(five.percentUsed),
+          weekResets: week?.resetsAt,
+        }
+      } catch {
+        // A host without session.usage keeps the estimate.
+      }
+      const s = await update($, statsA, x => ({ ...x, ...live, turns: x.turns + 1, ctx }))
+      if ((s.week ?? 0) >= 70 && !weekWarned) {
+        weekWarned = true
+        $.ui.toast(advice(s, await read($, costsA)))
+      }
       if (ctx > BIG_CONTEXT && !bigWarned) {
         bigWarned = true
         $.ui.toast(advice(s, await read($, costsA)))

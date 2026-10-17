@@ -55,7 +55,7 @@ files below. A repo that already has the workflow is left alone.
 
 ### Warnings
 
-- Context per turn in the status line; a note once it passes 150k.
+- Live context window and your 5-hour and weekly limits in the status line (from the host, not estimated); a note once context passes 150k, and pro-tier advice once the weekly limit passes 70% or the 5-hour window passes 80%.
 - A cold prompt cache after 55 idle minutes.
 - Images in a prompt and any tool result over 20,000 characters, since both ride in context on every later turn.
 - `CLAUDE.md` over 200 lines, `.claude/now.md` over 60 lines or at 20 inbox items.
