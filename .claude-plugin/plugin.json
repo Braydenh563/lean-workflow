@@ -1,6 +1,6 @@
 {
   "name": "lean-workflow",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Token-efficient, self-improving Claude Code workflow: usage dashboard and guards, model rungs, read-only scout and independent reviewer agents, an end-of-session retro that tunes the rules on evidence.",
   "userConfig": {
     "grepOnly": {

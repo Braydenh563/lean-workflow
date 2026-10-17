@@ -12,7 +12,7 @@ const SEEN_KEY = 'seen'
 // Static, so it caches: a system prompt that changed per turn would rewrite the cache every time.
 const AUTOPILOT = [
   'Lean workflow autopilot (from the lean-workflow plugin):',
-  '- If CLAUDE.md has no "Lean workflow" section, run the lean-setup skill before other work.',
+  '- Run the lean-setup skill once per repo, only when CLAUDE.md neither has a "Lean workflow" section nor names the lean-workflow plugin, and no retro ledger exists. A repo that already carries the workflow is never set up again.',
   '- Route by rungs: haiku (scout) for lookup and mechanical work, sonnet for implementation, opus for design and risky review. Every Agent call names a model. Fable only when the user names it for that task.',
   '- When the user\'s ask is done and pushed, or a plugin note says context is high, update the handover state, run the retro skill, and tell the user to start a fresh session.',
   '- Batch independent tool calls; grep then read line ranges; one retry per new hypothesis.',

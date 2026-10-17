@@ -1,12 +1,17 @@
 ---
 name: lean-setup
-description: Set up the lean, self-improving workflow in the current repo: a short CLAUDE.md section with model rungs, tiers, usage levers and the Fable opt-in rule, plus an empty retro ledger. Use when the user says "lean setup", "set up the workflow here", or opens a repo without a "Lean workflow" section in CLAUDE.md.
+description: Set up the lean, self-improving workflow in the current repo, once (it stops if the repo already has it): a short CLAUDE.md section with model rungs, tiers, usage levers and the Fable opt-in rule, plus an empty retro ledger. Use when the user says "lean setup", "set up the workflow here", or opens a repo without a "Lean workflow" section in CLAUDE.md.
 ---
 
 # Lean setup (under 8 tool calls)
 
-1. Read CLAUDE.md (create it if missing). If it already has a
-   "## Lean workflow" section, stop and say so.
+1. Read CLAUDE.md (create it if missing). Stop and say so, changing
+   nothing, if any of these holds: CLAUDE.md has a "Lean workflow"
+   heading, names the `lean-workflow` plugin, or already states model
+   rungs and the Fable opt-in rule; or `.claude/retro-ledger.md` or
+   `.claude/skills/retro/ledger.md` exists. The repo already has the
+   workflow, perhaps under another heading; offer to compare the two
+   instead of adding a second copy.
 2. Find the repo's own fast checks (lint, typecheck, unit tests) from its
    config files and CI workflow; name them in step 3. Do not invent any.
 3. Append this section to CLAUDE.md, filling the two bracketed values:
@@ -37,7 +42,7 @@ Tier: `max` (set `pro` on the Pro plan). Fast checks: [the repo's commands].
 - At session end run `retro`.
 ```
 
-4. Create `.claude/retro-ledger.md` with the header line from the retro
+4. If missing, create `.claude/retro-ledger.md` with the header line from the retro
    skill and one baseline row.
 5. If the repo has no handover or status file, create `.claude/now.md`, at
    most 30 lines, with six headings: Goal, Current state (branch, what
