@@ -1,0 +1,13 @@
+{
+  "name": "lean-workflow",
+  "owner": {
+    "name": "Braydenh563"
+  },
+  "plugins": [
+    {
+      "name": "lean-workflow",
+      "source": "./",
+      "description": "Token-efficient, self-improving Claude Code workflow: usage guards, model rungs, code map, orient and gate scripts, retro."
+    }
+  ]
+}

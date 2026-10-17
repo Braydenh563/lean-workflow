@@ -4,7 +4,7 @@ A token-efficient, self-improving Claude Code workflow you can install in any re
 
 ## Install (once per machine)
 
-    /plugin install lean-workflow --marketplace Braydenh563/Tessellate
+    /plugin install lean-workflow --marketplace Braydenh563/lean-workflow
 
 Then, in each repo, Claude runs `lean-setup` by itself the first time (the
 plugin tells it to when CLAUDE.md has no "Lean workflow" section).
@@ -66,3 +66,7 @@ An existing 1.0 repo gets the new pieces with "lean upgrade".
 - Disable plugins `/prune` names, in your Claude settings.
 - Optional: a weekly scheduled task with the repo attached (the setup
   report gives the prompt).
+
+## Licence
+
+MIT. Born in [Tessellate](https://github.com/Braydenh563/Tessellate), where it is used daily.
