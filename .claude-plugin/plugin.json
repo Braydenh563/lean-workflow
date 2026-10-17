@@ -1,0 +1,13 @@
+{
+  "name": "lean-workflow",
+  "version": "1.0.0",
+  "description": "Token-efficient, self-improving Claude Code workflow: usage dashboard and guards, model rungs, read-only scout and independent reviewer agents, an end-of-session retro that tunes the rules on evidence.",
+  "userConfig": {
+    "grepOnly": {
+      "type": "string",
+      "title": "Grep-only files",
+      "description": "Regex of paths that must never be read whole (read a line range instead).",
+      "default": "(^|/)(CODEMAP\\.md|HISTORY\\.md|CHANGELOG\\.md|package-lock\\.json|yarn\\.lock|pnpm-lock\\.yaml|poetry\\.lock|Cargo\\.lock)$|\\.min\\.js$|\\.map$"
+    }
+  }
+}
