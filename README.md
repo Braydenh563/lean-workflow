@@ -9,7 +9,18 @@
 </p>
 
 <p align="center">
-  <a href="LICENSE">MIT</a> · v1.1.1 · <a href="#install">Install</a> · <a href="#what-it-does">What it does</a> · <a href="#configuration">Configuration</a>
+  <a href="https://github.com/Braydenh563/lean-workflow/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Braydenh563/lean-workflow/actions/workflows/ci.yml/badge.svg"></a>
+  <img alt="version 1.1.1" src="https://img.shields.io/badge/version-1.1.1-2DD4BF?labelColor=0B1220">
+  <a href="LICENSE"><img alt="MIT licence" src="https://img.shields.io/badge/licence-MIT-38BDF8?labelColor=0B1220"></a>
+  <img alt="Claude Code plugin" src="https://img.shields.io/badge/Claude%20Code-plugin-FBBF24?labelColor=0B1220">
+</p>
+
+<p align="center">
+  <a href="#install"><img alt="Install" src="https://img.shields.io/badge/-Install-0B1220?style=flat-square"></a>
+  <a href="#what-it-does"><img alt="What it does" src="https://img.shields.io/badge/-What%20it%20does-0B1220?style=flat-square"></a>
+  <a href="#what-lean-setup-adds-to-a-repo"><img alt="Repo setup" src="https://img.shields.io/badge/-Repo%20setup-0B1220?style=flat-square"></a>
+  <a href="#configuration"><img alt="Configuration" src="https://img.shields.io/badge/-Configuration-0B1220?style=flat-square"></a>
+  <a href="#status-and-limits"><img alt="Limits" src="https://img.shields.io/badge/-Limits-0B1220?style=flat-square"></a>
 </p>
 
 ---
