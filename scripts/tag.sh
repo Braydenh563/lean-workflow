@@ -52,7 +52,8 @@ if [ "$push" -eq 1 ] && [ "${#new[@]}" -gt 0 ]; then
   if [ "${#failed[@]}" -gt 0 ]; then
     echo "not pushed: ${failed[*]}" >&2
     echo "GitHub refuses a tag push from Actions (GITHUB_TOKEN) when the tagged commit's history changes a file under .github/workflows." >&2
-    echo "Push those from your own checkout instead: git fetch origin main --tags && scripts/tag.sh --all --push" >&2
+    echo "Fix once: add a repository secret TAG_TOKEN (fine-grained token, Contents and Workflows read/write); the workflow uses it. See README, Releases." >&2
+    echo "Or push from your own checkout: git tag -a <tag> -m <msg> <commit> && git push origin <tag> (scripts/tag.sh --all --push in a bash shell)." >&2
     exit 1
   fi
 fi

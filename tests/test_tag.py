@@ -111,6 +111,7 @@ def test_the_workflow_offers_a_run_button_with_a_version_box():
     for part in ("workflow_dispatch:", "version:", "required: true", "backfill:", "release:", "contents: write", "scripts/tag.sh --version"):
         assert part in text, part
     assert "${{ inputs.version }}" in text and "run: |" in text
+    assert text.count("secrets.TAG_TOKEN || github.token") == 2  # checkout (git push) and gh (release)
     # inputs reach the shell through env, never interpolated into the script text
     assert "${{ inputs" not in text.split("run: |", 1)[1]
 
@@ -130,6 +131,6 @@ def test_a_refused_tag_does_not_stop_the_others_and_the_run_still_fails_with_the
     env = {"GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t", "PATH": "/usr/bin:/bin:/usr/local/bin"}
     r = subprocess.run(["bash", str(repo / "scripts" / "tag.sh"), "--all", "--push"], cwd=repo, capture_output=True, text=True, env=env)
     assert r.returncode == 1
-    assert "not pushed: lean-workflow--v1.1.0" in r.stderr and "scripts/tag.sh --all --push" in r.stderr
+    assert "not pushed: lean-workflow--v1.1.0" in r.stderr and "TAG_TOKEN" in r.stderr and "scripts/tag.sh --all --push" in r.stderr
     pushed = git(remote, "tag", "-l")
     assert "lean-workflow--v1.0.0" in pushed and "lean-workflow--v1.2.0" in pushed and "v1.1.0" not in pushed
