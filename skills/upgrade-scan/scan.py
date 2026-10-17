@@ -5,6 +5,12 @@
   scan.py api TYPES.d.ts           list the hook events and exported types in a plugin API file
   scan.py api TYPES.d.ts --diff    compare them with skills/upgrade-scan/api-snapshot.json
   scan.py api TYPES.d.ts --write   replace the snapshot (only in the scan PR, after reading the diff)
+  scan.py items LEDGER [LEDGER ...]  per-item ledgers (scripts/item_ledger.py): rework by task type and rung, and rung moves
+  scan.py changelog FILE [--since X.Y.Z]   the Claude Code CHANGELOG.md: versions after X.Y.Z, only the lines that touch this plugin
+  scan.py notes FILE [--since YYYY-MM-DD]  Anthropic release notes (.md): dated entries after the date, only model, price and retirement lines
+  scan.py last [--write --claude-code X.Y.Z --notes YYYY-MM-DD]   what the last scan read (last-scan.json)
+
+Both sources are about a megabyte: never print or read them whole; these commands keep the matching lines.
 """
 import json
 import re
@@ -14,6 +20,11 @@ from collections import Counter
 from pathlib import Path
 
 SNAPSHOT = Path(__file__).with_name("api-snapshot.json")
+LAST = Path(__file__).with_name("last-scan.json")
+SOURCES = {
+    "claude_code_changelog": "https://raw.githubusercontent.com/anthropics/claude-code/main/CHANGELOG.md",
+    "anthropic_release_notes": "https://platform.claude.com/docs/en/release-notes/overview.md",
+}
 COLS = ["date", "branch", "tier", "orchestrator", "turns", "ctx", "cost", "agents", "delivered", "signal", "rule"]
 
 
@@ -64,10 +75,111 @@ def api_diff(old: dict, new: dict) -> dict:
     }
 
 
+def item_ledger():
+    import importlib.util
+
+    path = Path(__file__).resolve().parents[2] / "scripts" / "item_ledger.py"
+    spec = importlib.util.spec_from_file_location("item_ledger", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+# what this plugin depends on, by topic: a changelog line that matches none of these is noise to the scan
+TOPICS = {
+    "hooks": r"\bhooks?\b|\bPreToolUse\b|\bPostToolUse\b|\bSessionStart\b|\bStop hook\b|\bprompt\.compose\b",
+    "plugins": r"\bplugins?\b|\bmarketplace\b|\buserConfig\b|\bplugin\.json\b|\bmods?\b",
+    "skills": r"\bskills?\b|\bslash commands?\b",
+    "agents": r"\bagents?\b|\bsubagents?\b|\bworktree\b",
+    "limits": r"\busage limits?\b|\brate limits?\b|\b5-hour\b|\bweekly\b|\bsession usage\b|\bcredits?\b",
+    "cache": r"\bprompt cache\b|\bcache (miss|hit|read|write)|\bcompact(ion|ing)?\b",
+    "models": r"\b(opus|sonnet|haiku|fable)\b|\bmodel (alias|id)s?\b|\bdefault model\b",
+}
+MODEL_LINE = re.compile(r"claude-[a-z0-9.-]+|\b(opus|sonnet|haiku|fable)\b|\bdeprecat|\bretire|\bpric(e|ing)|\bper million\b|\bcontext window\b|\bfast mode\b|\brate limit", re.I)
+
+
+def vtuple(v: str) -> tuple:
+    return tuple(int(x) for x in re.findall(r"\d+", v)[:3])
+
+
+def parse_changelog(text: str, since: str | None = None) -> dict:
+    """Versions newer than `since` (`## 2.1.302` headings), each with the bullets that match a topic."""
+    out, cur = [], None
+    for line in text.splitlines():
+        m = re.match(r"##\s+v?(\d+\.\d+\.\d+)\s*$", line)
+        if m:
+            cur = {"version": m.group(1), "hits": []}
+            out.append(cur)
+        elif cur and re.match(r"\s*[-*]\s", line):
+            topics = [t for t, rx in TOPICS.items() if re.search(rx, line, re.I)]
+            if topics:
+                cur["hits"].append({"topics": topics, "line": line.strip()[:300]})
+    if since:
+        out = [v for v in out if vtuple(v["version"]) > vtuple(since)]
+    return {"newest": out[0]["version"] if out else since, "versions": [v for v in out if v["hits"]], "scanned": len(out)}
+
+
+def parse_notes(text: str, since: str | None = None) -> dict:
+    """Dated entries (`### October 15, 2026`) after `since`, each with the bullets about models, prices or retirements."""
+    from datetime import datetime
+
+    def day(h: str):
+        for fmt in ("%B %d, %Y", "%Y-%m-%d", "%b %d, %Y"):
+            try:
+                return datetime.strptime(h.strip(), fmt).date().isoformat()
+            except ValueError:
+                pass
+        return None
+
+    out, cur = [], None
+    for line in text.splitlines():
+        m = re.match(r"#{2,4}\s+(.+?)\s*$", line)
+        if m and day(m.group(1)):
+            cur = {"date": day(m.group(1)), "hits": []}
+            out.append(cur)
+        elif cur and re.match(r"\s*[-*]\s", line):
+            text_only = re.sub(r"\]\([^)]*\)", "]", line.strip())  # a link's address is not the entry's subject
+            if MODEL_LINE.search(text_only):
+                cur["hits"].append(text_only[:400])
+    if since:
+        out = [e for e in out if e["date"] > since]
+    return {"newest": max((e["date"] for e in out), default=since), "entries": [e for e in out if e["hits"]], "scanned": len(out)}
+
+
+def read_last() -> dict:
+    return json.loads(LAST.read_text()) if LAST.exists() else {"claude_code": None, "notes": None, "sources": SOURCES}
+
+
+def flag(argv: list[str], name: str) -> str | None:
+    return argv[argv.index(name) + 1] if name in argv and argv.index(name) + 1 < len(argv) else None
+
+
 def main(argv: list[str]) -> int:
-    if len(argv) < 2 or argv[1] not in ("ledger", "api"):
+    if len(argv) < 2 or argv[1] not in ("ledger", "api", "items", "changelog", "notes", "last"):
         print(__doc__)
         return 2
+    if argv[1] == "items":
+        mod = item_ledger()
+        print(json.dumps(mod.summary([Path(p).read_text() for p in argv[2:] if Path(p).exists()]), indent=2))
+        return 0
+    if argv[1] in ("changelog", "notes"):
+        if len(argv) < 3:
+            print(__doc__)
+            return 2
+        last = read_last()
+        since = flag(argv, "--since") or last.get("claude_code" if argv[1] == "changelog" else "notes")
+        parse = parse_changelog if argv[1] == "changelog" else parse_notes
+        print(json.dumps(parse(Path(argv[2]).read_text(), since), indent=2))
+        return 0
+    if argv[1] == "last":
+        if "--write" in argv:
+            last = read_last()
+            last["claude_code"] = flag(argv, "--claude-code") or last.get("claude_code")
+            last["notes"] = flag(argv, "--notes") or last.get("notes")
+            last["sources"] = SOURCES
+            LAST.write_text(json.dumps(last, indent=1) + "\n")
+        print(json.dumps(read_last(), indent=2))
+        return 0
     if argv[1] == "ledger":
         path = Path(argv[2] if len(argv) > 2 else ".claude/retro-ledger.md")
         print(json.dumps(ledger_summary(path.read_text()), indent=2))

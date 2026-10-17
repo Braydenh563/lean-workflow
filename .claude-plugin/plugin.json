@@ -1,7 +1,7 @@
 {
   "name": "lean-workflow",
-  "version": "1.5.0",
-  "description": "Token-efficient, self-improving Claude Code workflow: usage dashboard and guards, model rungs, read-only scout and independent reviewer agents, a code map, orient and gate scripts, size warnings, a habit coach with /coach, an end-of-session retro that tunes the rules on evidence, and a weekly upgrade-scan.",
+  "version": "1.6.0",
+  "description": "Token-efficient, self-improving Claude Code workflow: usage dashboard and guards, model rungs, read-only scout and independent reviewer agents, a code map, orient and gate scripts, size warnings, a habit coach with /coach, live limit bars and a tier that follows the weekly limit, modes (focus, triage, review, budget, release), guards and a morning briefing for unattended runs, an end-of-session retro, a per-item rung ledger and a weekly upgrade-scan.",
   "author": {
     "name": "Braydenh563"
   },
@@ -25,6 +25,24 @@
       "title": "now.md line limit",
       "description": "Warn when .claude/now.md is read whole or written past this many lines.",
       "default": 60
+    },
+    "tier": {
+      "type": "string",
+      "title": "Tier",
+      "description": "max or pro. The live limits raise it on their own: pro at 70% weekly (one agent, no Opus, budget mode), stop at your finish-up line.",
+      "default": "max"
+    },
+    "finishAtWeek": {
+      "type": "number",
+      "title": "Finish up at weekly %",
+      "description": "Weekly usage at which the model is told to finish the step, commit, push and stop (an active work order is marked stopped). You can also say it in a prompt: \"finish up at 60% weekly\".",
+      "default": 85
+    },
+    "finishAtFiveHour": {
+      "type": "number",
+      "title": "Finish up at 5-hour %",
+      "description": "Same, for the 5-hour window.",
+      "default": 90
     },
     "coachOff": {
       "type": "string",

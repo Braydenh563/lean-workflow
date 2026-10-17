@@ -33,6 +33,15 @@ rules, record the choice, and carry on. Stop only on the conditions below.
 - Open a PR every 3 to 5 finished items, never one PR for the whole night;
   fix its CI before moving on. Do not merge to the default branch: the user
   merges.
+- Guards apply (the plugin refuses the calls): no force-push, no edits to CI
+  definitions or Claude settings, a document input read once into
+  `.claude/inputs/<file>.txt`, and the run stops after 60 minutes with no
+  commit. Mark an item `[!]` instead of working around one. Details in the
+  `work` skill.
+- After each item, record it:
+  `python "${CLAUDE_PLUGIN_ROOT}/scripts/item_ledger.py" add --type <type> --rung <rung> --rework <n> "<item>"`
+  (type and rung table in the `work` skill), so `upgrade-scan` can move task
+  types between rungs on evidence.
 - After each item: one line in the handover (done, commit, PR, next). This
   is what survives a compaction or a new session.
 - Wait on CI by its PR subscription or by doing the next item, never by an
@@ -41,14 +50,19 @@ rules, record the choice, and carry on. Stop only on the conditions below.
 ## Stop rules (check `/spend` figures each item)
 
 - Weekly limit 70% or more: pro habits (one agent, no Opus, targeted tests).
-- Weekly limit 85% or more, or the 5-hour window 90% or more: finish the
-  step, push, stop.
+- Weekly limit 85% or more (or the user's own finish-up line), or the 5-hour
+  window 90% or more: finish the step, push, stop. The plugin marks the work
+  order `stopped (usage)`.
+- 60 minutes with no commit: the Stop hook ends the run.
 - An item failed twice with new evidence each time: mark it blocked in the
   handover with the evidence, move to the next.
 - Nothing left in the queue: run `upgrade-scan` if it is due, else stop.
 
 ## On stopping
 
-Write the morning summary at the top of the handover and as the final
-message, 8 lines at most: done (with PRs), blocked (why, what is needed from
-the user), usage used, next item. Then run `retro`.
+Write the morning summary at the top of the handover under the heading
+`## Morning summary`, and as the final message, 8 lines at most: done (with
+PRs), blocked (why, what is needed from the user), usage used, next item.
+The plugin shows that block, with the work order's bars and blocked items,
+as a briefing at the next session start (`/brief` shows it again). Then run
+`retro`.

@@ -17,6 +17,10 @@ description: End-of-session workflow retrospective for any repo. Measures where 
      what a brief could have named, retries without a new hypothesis.
    - Rework: a fix that came back, a reviewer finding the builder missed.
    - A rung mismatch: Opus on mechanical work, Haiku output that was redone.
+   If `.claude/item-ledger.md` exists, run
+   `python "${CLAUDE_PLUGIN_ROOT}/scripts/item_ledger.py" summary`: rework by
+   task type and rung. It informs the signal; it never changes a rule here.
+   Rung moves belong to `upgrade-scan`, which waits for repeated evidence.
 3. Append one line to `.claude/retro-ledger.md` (create it with this header
    if missing):
    `date | branch | tier | orchestrator | turns | ctx/turn | cost r/w/o | agents | delivered | waste signal | rule changed`

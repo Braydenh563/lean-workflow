@@ -4,8 +4,14 @@ import type { Register } from 'claude-code'
 import type { AgentRow, ModelCost, SessionSummary, Stats, TaskRow } from '../types'
 import { agentModel, bigImage, bigPaste, branchInfo, coachReport, fanOut, idleGap, longPr, longSession, makeCoach, parseOff, reread, weeklyLimit, W } from './coach'
 import type { CoachRow } from './coach'
-import { dashText, k } from './format'
+import { briefingText, HANDOVER_FILES, signature } from './briefing'
+import { dashText, k, weekTrend } from './format'
+import { DOC_EXT, textCopyPath, unattendedDeny } from './guards'
+import { modeFromPrompt, modeFromSkill, triageDeny } from './modes'
+import type { Mode } from './modes'
 import { inboxCount, parseOrder, planCounts, progressText } from './progress'
+import { finishLine, tierFor, tierNote } from './tier'
+import type { Tier } from './tier'
 
 const DEFAULT_GREP_ONLY = '(^|/)(CODEMAP\\.md|HISTORY\\.md|CHANGELOG\\.md|package-lock\\.json|yarn\\.lock|pnpm-lock\\.yaml|poetry\\.lock|Cargo\\.lock)$|\\.min\\.js$|\\.map$'
 // Agents that pin their own model; anything else must name one (the rungs).
@@ -14,6 +20,8 @@ const HISTORY_KEY = 'history'
 const USED_KEY = 'used'
 const SEEN_KEY = 'seen'
 const COACH_KEY = 'coach'
+const BRIEFED_KEY = 'briefed'
+const VIEW_TOOL = 'mcp__lean-workflow__view'
 // Static, so it caches: a system prompt that changed per turn would rewrite the cache every time.
 const AUTOPILOT = [
   'Lean workflow autopilot (from the lean-workflow plugin):',
@@ -24,6 +32,10 @@ const AUTOPILOT = [
   '- Agents keep a remaining-work file and commit at least every 20 minutes. Tests take a fixed "now" instead of reading the clock. A claim about how a UI looks needs a measurement from the running app.',
   '- Batch independent tool calls; grep then read line ranges; one retry per new hypothesis.',
   '- When the user says they are going to sleep, to work, out or away, or asks for work while they are gone, run the away skill: work the queue unattended, never stop to ask, stop before the limits, leave a summary.',
+  '- Modes (skills): "focus mode" or one thing only runs focus; "triage" (inbox, screenshots to describe) runs triage: inbox-only, a Haiku agent describes screenshots, no builds; "review this PR/diff" runs review; "budget mode", or a plugin note that the weekly limit passed 70%, runs budget; "cut a release" runs release. "exit <mode>" leaves a mode.',
+  '- The plugin shows a morning briefing at session start after an away or work-order run (/brief). Unattended runs (an active work order) never force-push, never edit CI files or Claude settings, stop after 60 minutes with no commit, and read a document (PDF, Office file) once, keeping a text copy in .claude/inputs/.',
+  '- After each work-order or away item, record it: python "${CLAUDE_PLUGIN_ROOT}/scripts/item_ledger.py" add --type <kind> --rung <haiku|sonnet|opus> --rework <n> "<item>". The weekly upgrade-scan moves task types between rungs from these lines.',
+  '- For the usage dashboard, progress, spend, coach or the briefing, when a slash command shows nothing (browser and some apps do not route plugin commands), call the lean-workflow view tool (view: dash, progress, spend, coach or brief) and show its text as is.',
   '- Work orders: "ship" (drive this PR green: conflicts, CI, CodeQL, review threads, bugs, then merge) or "continue" (keep developing, fast and lean, with rotating bug, security, architecture, UX, WCAG and overflow scans) runs the work skill (also /work ship|continue|stop), which writes .claude/work-order.md; a Stop hook then keeps the run going until its checklist is done or a stop rule is met. /progress shows where it is.',
 ].join('\n')
 // Files that ride in every session's context: a size limit keeps them lean.
@@ -37,6 +49,7 @@ const BIG_CONTEXT = 150_000
 const BIG_OUTPUT = 20_000
 const PANE = 'lean-dash'
 
+const modeA = atom({ plugin: 'lean-workflow', key: 'mode' } as const, '')
 const agentsA = atom({ plugin: 'lean-workflow', key: 'agents' } as const, [])
 const tasksA = atom({ plugin: 'lean-workflow', key: 'tasks' } as const, [])
 const costsA = atom({ plugin: 'lean-workflow', key: 'costs' } as const, {})
@@ -48,11 +61,11 @@ function weighted(c: ModelCost): number {
   return c.input * W.input + c.reads * W.reads + c.writes * W.writes + c.output * W.output
 }
 
-function label(s: Stats): string {
+function label(s: Stats, tier: Tier = 'max'): string {
   const pct = s.ctxPct === undefined ? '' : ` (${s.ctxPct}%)`
   const week = s.week === undefined ? '' : ` · week ${s.week}%`
   const five = s.fiveHour === undefined ? '' : ` · 5h ${s.fiveHour}%`
-  return `ctx ${k(s.ctx)}${pct}${week}${five} · turns ${s.turns} · agents ${s.agents}`
+  return `ctx ${k(s.ctx)}${pct}${week}${five}${tier === 'max' ? '' : ` · tier ${tier}`} · turns ${s.turns} · agents ${s.agents}`
 }
 
 // The single most useful next step, from this session's numbers.
@@ -134,11 +147,124 @@ async function progress($: ProgressHost): Promise<string> {
   })
 }
 
+// Per-activation state the helpers share (the hooks module is loaded fresh on a reload, so this starts over then).
+const state = {
+  tier: 'max' as Tier,
+  autoBudget: false,
+  opusAsked: false,
+  tierNoteDue: undefined as string | undefined,
+  unattendedAt: 0,
+  unattendedNow: false,
+  docsRead: new Set<string>(),
+  // The user's finish-up lines: the plugin options, replaced for a session by a line in a prompt ("finish up at 60% weekly").
+  opts: { base: undefined as string | undefined, finishWeek: undefined as number | undefined, finishFive: undefined as number | undefined },
+  finishWeek: undefined as number | undefined,
+  finishFive: undefined as number | undefined,
+  nearNoted: false,
+}
+
+function tierNow(s: Stats) {
+  return tierFor({ base: state.opts.base, week: s.week, fiveHour: s.fiveHour, finishWeek: state.finishWeek ?? state.opts.finishWeek, finishFive: state.finishFive ?? state.opts.finishFive })
+}
+type Coach = ReturnType<typeof makeCoach>
+
+// An active work order (which `away` also writes) means nobody is watching: the guards apply.
+async function isUnattended($: ProgressHost): Promise<boolean> {
+  const now = await $.clock.now()
+  if (now - state.unattendedAt > 15_000) {
+    state.unattendedAt = now
+    state.unattendedNow = /^active\b/.test(parseOrder(await sh(argv => $.process.run(argv), ['cat', '.claude/work-order.md']))?.status ?? '')
+  }
+  return state.unattendedNow
+}
+
+// Mark an active work order stopped, e.g. when the weekly limit passes the stop line. The Stop hook then lets the run end.
+async function stopOrder($: ProgressHost & { fs: { write: (path: string, text: string) => Promise<void> } }, why: string): Promise<void> {
+  const text = await sh(argv => $.process.run(argv), ['cat', '.claude/work-order.md'])
+  if (!/^status:\s*active/m.test(text)) return
+  await $.fs.write('.claude/work-order.md', text.replace(/^status:.*$/m, `status: stopped (${why})`)).catch(() => undefined)
+  state.unattendedAt = 0
+}
+
+async function setMode($: Parameters<typeof update>[0], mode: Mode | '', auto = false): Promise<void> {
+  state.autoBudget = auto
+  await update($, modeA, () => mode)
+}
+
+async function dashView($: ProgressHost & Store): Promise<string> {
+  const costs = await read($, costsA)
+  const s = await read($, statsA)
+  const total = Object.values(costs).reduce((a, c) => a + weighted(c), 0) || 1
+  const sum = (f: (c: ModelCost) => number) => Object.values(costs).reduce((a, c) => a + f(c), 0) / total
+  const history = ((await $.store.get(HISTORY_KEY)) ?? []) as SessionSummary[]
+  return dashText({
+    stats: s,
+    agents: await read($, agentsA),
+    tasks: await read($, tasksA),
+    costs: Object.entries(costs).map(([model, c]) => ({ model, share: weighted(c) / total, turns: c.turns, out: c.output })),
+    split: { reads: sum(c => c.reads * W.reads), writes: sum(c => c.writes * W.writes), output: sum(c => c.output * W.output) },
+    now: await $.clock.now(),
+    advice: advice(s, costs),
+    trend: await trend($, s),
+    bigContext: BIG_CONTEXT,
+    limits: {
+      tier: state.tier,
+      tierReason: tierNow(s).reason,
+      mode: (await read($, modeA)) || undefined,
+      weekTrend: weekTrend(history, s.week),
+    },
+  }) + '\n\n' + (await progress($))
+}
+
+async function spendView($: ProgressHost & Store): Promise<string> {
+  const s = await read($, statsA)
+  const costs = await read($, costsA)
+  const total = Object.values(costs).reduce((a, c) => a + weighted(c), 0) || 1
+  const sum = (f: (c: ModelCost) => number) => Object.values(costs).reduce((a, c) => a + f(c), 0)
+  const pct = (n: number) => `${Math.round((100 * n) / total)}%`
+  const byModel = Object.entries(costs).map(([m, c]) => `${m} ${pct(weighted(c))}`).join(', ')
+  return [
+    `turns ${s.turns}, context ${k(s.ctx)}, tool calls ${s.calls}, agents ${s.agents}, blocked ${s.denies}`,
+    `cost share: cache reads ${pct(sum(c => c.reads * W.reads))}, cache writes ${pct(sum(c => c.writes * W.writes))}, output ${pct(sum(c => c.output * W.output))}`,
+    `by model: ${byModel || 'none yet'}`,
+    await trend($, s),
+    advice(s, costs),
+  ].join('\n')
+}
+
+async function coachView($: Store, coach: Coach, off: ReadonlySet<Habit>): Promise<string> {
+  const history = ((await $.store.get(COACH_KEY)) ?? []) as CoachRow[]
+  return coachReport(history, coach.hits(), coach.flagged(), off)
+}
+
+// The briefing for the work order in this repo; `force` shows it again.
+async function briefView($: ProgressHost & Store, force: boolean): Promise<string | undefined> {
+  const run: Run = argv => $.process.run(argv)
+  const order = await sh(run, ['cat', '.claude/work-order.md'])
+  const text = briefingText(order, await handover(run))
+  if (!text) return undefined
+  const sig = signature(order)
+  const seen = ((await $.store.get(BRIEFED_KEY)) ?? []) as string[]
+  if (!force && seen.includes(sig)) return undefined
+  if (!seen.includes(sig)) await $.store.set(BRIEFED_KEY, [...seen, sig].slice(-20))
+  return text
+}
+
+// The first handover file that exists.
+async function handover(run: Run): Promise<string | undefined> {
+  for (const f of HANDOVER_FILES) {
+    const text = await sh(run, ['cat', f])
+    if (text) return text
+  }
+  return undefined
+}
+
 export const register: Register = (on, options) => {
-  const opts = options as { coachOff?: string; grepOnly?: string; claudeMdMaxLines?: number | string; nowMaxLines?: number | string }
+  const opts = options as { coachOff?: string; grepOnly?: string; claudeMdMaxLines?: number | string; nowMaxLines?: number | string; tier?: string; finishAtWeek?: number | string; finishAtFiveHour?: number | string }
   const grepOnly = new RegExp(String(opts.grepOnly || DEFAULT_GREP_ONLY))
   const claudeMax = Number(opts.claudeMdMaxLines) || DEFAULT_CLAUDE_MD_MAX
   const nowMax = Number(opts.nowMaxLines) || DEFAULT_NOW_MAX
+  state.opts = { base: opts.tier, finishWeek: Number(opts.finishAtWeek) || undefined, finishFive: Number(opts.finishAtFiveHour) || undefined }
   const sizeWarned = new Set<string>()
   let ctxNoted = false
   // A turn's usage sums every model request in it; each main-thread tool call adds one.
@@ -154,13 +280,22 @@ export const register: Register = (on, options) => {
   let spawned = 0
   let prChecked = false
   let prNudge: ReturnType<typeof longPr>
-
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'spend', description: "This session's cost split and the best next step to cut it" })
     await $.command.register({ name: 'prune', description: 'Plugins and skills you never use, from the sessions recorded so far' })
     await $.command.register({ name: 'coach', description: 'Habit counts and the trend from your stored sessions' })
     await $.command.register({ name: 'progress', description: 'Work order, tasks, agents, plan checklists and the inbox, as bars' })
-    await $.command.register({ name: 'dash', description: 'Open the usage dashboard: agents, tasks, cost by model, efficiency' })
+    await $.command.register({ name: 'dash', description: 'Open the usage dashboard: limits, agents, tasks, cost by model, efficiency' })
+    await $.command.register({ name: 'brief', description: 'Morning briefing: what the last away or work-order run left' })
+    // Browsers and some apps do not route plugin slash commands; the model can still call this.
+    await $.tool.register({
+      name: 'view',
+      description: 'Lean-workflow views as plain text: dash (limits, context, agents, cost), progress, spend, coach, brief (morning briefing). Show the text as is.',
+      inputSchema: { type: 'object', properties: { view: { type: 'string', enum: ['dash', 'progress', 'spend', 'coach', 'brief'] } }, required: ['view'] },
+      isDeferred: false,
+    }).catch(() => undefined)
+    const text = await briefView($ as unknown as ProgressHost & Store, false).catch(() => undefined)
+    if (text) $.ui.toast(text)
     return next(e)
   }).catch(($, e, next) => next(e))
 
@@ -168,48 +303,45 @@ export const register: Register = (on, options) => {
     const opened = await $.ui.open({ id: PANE, title: 'Usage' })
     if (opened?.isPlaced) return { text: 'Usage dashboard opened.' }
     // Surfaces that seat no panes (the desktop app here) get the same dashboard as text.
-    const costs = await read($, costsA)
-    const s = await read($, statsA)
-    const total = Object.values(costs).reduce((a, c) => a + weighted(c), 0) || 1
-    const sum = (f: (c: ModelCost) => number) => Object.values(costs).reduce((a, c) => a + f(c), 0) / total
-    return {
-      text: dashText({
-        stats: s,
-        agents: await read($, agentsA),
-        tasks: await read($, tasksA),
-        costs: Object.entries(costs).map(([model, c]) => ({ model, share: weighted(c) / total, turns: c.turns, out: c.output })),
-        split: { reads: sum(c => c.reads * W.reads), writes: sum(c => c.writes * W.writes), output: sum(c => c.output * W.output) },
-        now: await $.clock.now(),
-        advice: advice(s, costs),
-        trend: await trend($, s),
-        bigContext: BIG_CONTEXT,
-      }) + '\n\n' + (await progress($)),
-    }
+    return { text: await dashView($) }
   })
 
   on('command.run', { command: 'progress' }, async $ => ({ text: await progress($) }))
 
-  on('command.run', { command: 'spend' }, async $ => {
-    const s = await read($, statsA)
-    const costs = await read($, costsA)
-    const total = Object.values(costs).reduce((a, c) => a + weighted(c), 0) || 1
-    const sum = (f: (c: ModelCost) => number) => Object.values(costs).reduce((a, c) => a + f(c), 0)
-    const pct = (n: number) => `${Math.round((100 * n) / total)}%`
-    const byModel = Object.entries(costs).map(([m, c]) => `${m} ${pct(weighted(c))}`).join(', ')
-    return {
-      text: [
-        `turns ${s.turns}, context ${k(s.ctx)}, tool calls ${s.calls}, agents ${s.agents}, blocked ${s.denies}`,
-        `cost share: cache reads ${pct(sum(c => c.reads * W.reads))}, cache writes ${pct(sum(c => c.writes * W.writes))}, output ${pct(sum(c => c.output * W.output))}`,
-        `by model: ${byModel || 'none yet'}`,
-        await trend($, s),
-        advice(s, costs),
-      ].join('\n'),
-    }
+  on('command.run', { command: 'spend' }, async $ => ({ text: await spendView($) }))
+
+  on('command.run', { command: 'brief' }, async $ => ({ text: (await briefView($, true)) ?? 'No work order or handover to brief on.' }))
+
+  // The same views as a tool, for surfaces that do not route the slash commands.
+  on('tool.call', { tool: VIEW_TOOL }, async ($, e) => {
+    const view = String((e as unknown as { view?: string }).view ?? 'dash')
+    const text =
+      view === 'progress' ? await progress($)
+      : view === 'spend' ? await spendView($)
+      : view === 'coach' ? await coachView($, coach, off)
+      : view === 'brief' ? ((await briefView($, true)) ?? 'No work order or handover to brief on.')
+      : await dashView($)
+    return { result: text }
   })
 
   // Fable is opt-in: any later prompt that does not name it clears the grant.
   on('prompt.submit', async ($, e, next) => {
     fableAsked = /fable/i.test(e.text)
+    state.opusAsked = /opus/i.test(e.text)
+    const line = finishLine(e.text)
+    if (line) {
+      if (line.kind === 'week') state.finishWeek = line.pct
+      else state.finishFive = line.pct
+      state.nearNoted = false
+      const cur = await read($, statsA)
+      const now = line.kind === 'week' ? cur.week : cur.fiveHour
+      const where = `${line.kind === 'week' ? 'weekly' : '5-hour'} usage reaches ${line.pct}% (now ${now === undefined ? 'not reported' : now + '%'})`
+      state.tierNoteDue = `Finish-up line set by the user: when ${where}, finish the current step, commit and push, update the handover, and stop. The plugin tells you when you are near it.`
+      $.ui.toast(`${$.plugin.name}: finish-up line set: when ${where}`)
+    }
+    const asked = modeFromPrompt(e.text)
+    if (asked.exit) await setMode($, '')
+    else if (asked.mode) await setMode($, asked.mode)
     turnCalls = 0
     spawned = 0
     const now = await $.clock.now()
@@ -284,6 +416,23 @@ export const register: Register = (on, options) => {
         // A host without session.usage keeps the estimate.
       }
       const s = await update($, statsA, x => ({ ...x, ...live, turns: x.turns + 1, ctx }))
+      const t = tierNow(s)
+      const note = tierNote(state.tier, t)
+      state.tier = t.tier
+      const line = state.finishWeek ?? state.opts.finishWeek
+      if (!note && !state.nearNoted && line !== undefined && s.week !== undefined && s.week < line && s.week >= line - 5) {
+        state.nearNoted = true
+        state.tierNoteDue = `Weekly usage ${s.week}%, ${line - s.week} points from the finish-up line (${line}%): start wrapping up. Commit and push, update the handover, leave the next item named.`
+      }
+      if (note) {
+        state.tierNoteDue = note
+        $.ui.toast(`${$.plugin.name}: ${note}`)
+        const current = await read($, modeA)
+        // Budget mode switches itself on at the weekly 70% and off again when the limit recovers.
+        if (t.tier !== 'max' && !current) await setMode($, 'budget', true)
+        else if (t.tier === 'max' && state.autoBudget && current === 'budget') await setMode($, '')
+        if (t.tier === 'stop' && (await isUnattended($))) await stopOrder($, 'usage')
+      }
       const [shown] = coach.offer([
         ctx > BIG_CONTEXT ? longSession({ ageMs: 0, turns: s.turns, ctx }) : undefined,
         s.week === undefined ? undefined : weeklyLimit([{ kind: 'seven_day', percentUsed: s.week, resetsAt: s.weekResets }], await $.clock.now()),
@@ -291,7 +440,7 @@ export const register: Register = (on, options) => {
       if (shown) {
         $.ui.toast(`${$.plugin.name}: ${shown}`)
       }
-      $.ui.status(label(s))
+      $.ui.status(label(s, state.tier))
     }
     return next(e)
   }).catch(($, e, next) => next(e))
@@ -302,6 +451,20 @@ export const register: Register = (on, options) => {
       await update($, statsA, s => ({ ...s, denies: s.denies + 1 }))
       return { deny: `${$.plugin.name}: ${args.file_path} is huge. Grep it, then read a line range (offset and limit).` }
     }
+    // Unattended: a document (PDF, Office file) is read once, into a text copy that every later look uses.
+    if (DOC_EXT.test(args.file_path) && (await isUnattended($))) {
+      const copy = textCopyPath(args.file_path)
+      const saved = (await $.process.run(['test', '-f', copy]).catch(() => undefined))?.exitCode === 0
+      if (saved || state.docsRead.has(args.file_path)) {
+        await update($, statsA, s => ({ ...s, denies: s.denies + 1 }))
+        return { deny: `${$.plugin.name}: ${args.file_path} was already read once in this run. Use its text copy ${copy} (grep, then a line range). If no copy was saved, mark the item blocked ([!]) in the work order.` }
+      }
+      state.docsRead.add(args.file_path)
+      const ran = await next(e)
+      return ran.deny === undefined
+        ? { ...ran, context: [...(ran.context ?? []), `${$.plugin.name}: this document is read once in unattended runs. Save the text you need to ${copy} now (mkdir -p .claude/inputs; keep it out of commits); later reads of ${args.file_path} are refused. If the headroom plugin is installed, its peek skill outlines a long text copy so you read only the parts you need.`] }
+        : ran
+    }
     return next(e)
   }).catch(($, e, next) => next(e))
 
@@ -310,6 +473,11 @@ export const register: Register = (on, options) => {
     const type = args.subagent_type ?? 'general-purpose'
     const fable = args.model && /fable/i.test(args.model) && !fableAsked
     const bare = !args.model && !PINNED.has(type) && !type.includes(':')
+    const opus = state.tier !== 'max' && !!args.model && /opus/i.test(args.model) && !state.opusAsked
+    if (opus) {
+      await update($, statsA, s => ({ ...s, denies: s.denies + 1 }))
+      return { deny: `${$.plugin.name}: tier ${state.tier} (weekly limit high): no Opus agents. Use sonnet or haiku, or ask for Opus by name for this task.` }
+    }
     if (fable || bare) {
       await update($, statsA, s => ({ ...s, denies: s.denies + 1 }))
       return {
@@ -347,6 +515,14 @@ export const register: Register = (on, options) => {
 
   on('tool.call', async ($, e, next) => {
     const { tool_use_id: _id, agentId, ...args } = e as unknown as Record<string, unknown>
+    // Guards first, and for subagents too: a builder agent edits files as much as the main thread does.
+    const call = { tool: e.tool, command: args.command as string | undefined, file_path: args.file_path as string | undefined, notebook_path: args.notebook_path as string | undefined, model: args.model as string | undefined }
+    const refused = (await read($, modeA)) === 'triage' ? triageDeny(call) : undefined
+    const unattendedReason = refused ?? unattendedDeny(call)
+    if (unattendedReason && (refused || (await isUnattended($)))) {
+      await update($, statsA, x => ({ ...x, denies: x.denies + 1 }))
+      return { deny: `${$.plugin.name}: ${unattendedReason}` }
+    }
     if (typeof agentId === 'string') {
       await update($, agentsA, list => list.map(a => (a.id === agentId ? { ...a, calls: a.calls + 1, lastTool: e.tool } : a)))
       return next(e)
@@ -356,13 +532,17 @@ export const register: Register = (on, options) => {
     repeats = key && key === lastKey ? repeats + 1 : 1
     lastKey = key
     const s = await update($, statsA, x => ({ ...x, calls: x.calls + 1, denies: x.denies + (repeats >= REPEAT_LIMIT ? 1 : 0) }))
-    $.ui.status(label(s))
+    $.ui.status(label(s, state.tier))
     if (repeats >= REPEAT_LIMIT) {
       return { deny: `${$.plugin.name}: same call ${repeats} times in a row. Change the hypothesis or report the blocker.` }
     }
     const ran = await next(e)
     if (e.tool.startsWith('mcp__')) await markUsed($, e.tool.split('__')[1] ?? e.tool)
     const notes: string[] = []
+    if (state.tierNoteDue) {
+      notes.push(`${$.plugin.name}: ${state.tierNoteDue}`)
+      state.tierNoteDue = undefined
+    }
     const size = typeof ran.text === 'string' ? ran.text.length : 0
     if (size > BIG_OUTPUT && !bigOutputs.has(e.tool)) {
       bigOutputs.add(e.tool)
@@ -406,6 +586,8 @@ export const register: Register = (on, options) => {
 
   on('skill.prompt', async ($, e, next) => {
     await markUsed($, e.skill.includes(':') ? e.skill.split(':')[0] : e.skill)
+    const mode = modeFromSkill(e.skill)
+    if (mode) await setMode($, mode)
     return next(e)
   }).catch(($, e, next) => next(e))
 
@@ -417,7 +599,7 @@ export const register: Register = (on, options) => {
       const total = all.reduce((a, c) => a + weighted(c), 0) || 1
       const writeShare = Math.round((100 * all.reduce((a, c) => a + c.writes * W.writes, 0)) / total)
       const history = ((await $.store.get(HISTORY_KEY)) ?? []) as SessionSummary[]
-      const row: SessionSummary = { at: await $.clock.now(), turns: s.turns, ctx: s.ctx, calls: s.calls, agents: s.agents, denies: s.denies, writeShare }
+      const row: SessionSummary = { at: await $.clock.now(), turns: s.turns, ctx: s.ctx, calls: s.calls, agents: s.agents, denies: s.denies, writeShare, week: s.week, fiveHour: s.fiveHour }
       await $.store.set(HISTORY_KEY, [...history, row].slice(-30))
       const coached = ((await $.store.get(COACH_KEY)) ?? []) as CoachRow[]
       await $.store.set(COACH_KEY, [...coached, { at: row.at, hits: coach.hits(), flagged: coach.flagged() }].slice(-30))
@@ -428,13 +610,17 @@ export const register: Register = (on, options) => {
     prChecked = false
     prNudge = undefined
     lastTurnAt = 0
+    state.tier = 'max'
+    state.tierNoteDue = undefined
+    state.finishWeek = undefined
+    state.finishFive = undefined
+    state.nearNoted = false
+    state.docsRead.clear()
+    await setMode($, '')
     return next(e)
   }).catch(($, e, next) => next(e))
 
-  on('command.run', { command: 'coach' }, async $ => {
-    const history = ((await $.store.get(COACH_KEY)) ?? []) as CoachRow[]
-    return { text: coachReport(history, coach.hits(), coach.flagged(), off) }
-  })
+  on('command.run', { command: 'coach' }, async $ => ({ text: await coachView($, coach, off) }))
 
   on('command.run', { command: 'prune' }, async $ => {
     const used = ((await $.store.get(USED_KEY)) ?? {}) as Record<string, number>
@@ -461,13 +647,14 @@ export const register: Register = (on, options) => {
     const costs = await read($, costsA)
     const s = await read($, statsA)
     const now = await $.clock.now()
+    const mode = await read($, modeA)
     const total = Object.values(costs).reduce((a, c) => a + weighted(c), 0) || 1
     const done = tasks.filter(t => t.status === 'completed').length
 
     return (
       <Box flexDirection="column">
         <Text bold>Session</Text>
-        <Text>{label(s)} · blocked {s.denies}</Text>
+        <Text>{label(s, state.tier)} · blocked {s.denies}{mode ? ` · mode ${mode}` : ''}</Text>
         <Text bold>Agents</Text>
         {agents.length === 0 && <Text dimColor>None yet.</Text>}
         {agents.slice(-8).map(a => (
