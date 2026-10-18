@@ -18,6 +18,10 @@ test('a prompt asks for a mode by its trigger words, and leaves it with "exit"',
   expect(m('what is the release process in this repo')).toBeUndefined()
   expect(modeFromPrompt('exit triage mode').exit).toBe(true)
   expect(modeFromPrompt('back to normal').exit).toBe(true)
+  for (const t of ['exit triage', 'leave focus', 'stop the budget', 'end review', 'clear release', 'Exit triage please']) {
+    expect(modeFromPrompt(t).exit, t).toBe(true)
+  }
+  expect(modeFromPrompt('exit the parser').exit).toBeUndefined()
 })
 
 test('a skill name maps to its mode, with or without the plugin prefix', () => {
@@ -33,8 +37,11 @@ test('triage allows the inbox and haiku, and refuses edits elsewhere, builds and
   expect(triageDeny({ tool: 'Edit', file_path: 'src/app.ts' })).toContain('inbox-only')
   expect(triageDeny({ tool: 'Bash', command: 'git status' })).toBeUndefined()
   expect(triageDeny({ tool: 'Bash', command: 'git commit -m "inbox"' })).toBeUndefined()
-  for (const c of ['npm test', 'cd web && npm run build', 'pytest -q', 'make', 'scripts/gate.sh --full', 'bash scripts/gate.sh', 'cargo build']) {
+  for (const c of ['npm test', 'cd web && npm run build', 'pytest -q', 'make', 'scripts/gate.sh --full', 'bash scripts/gate.sh', 'cargo build', '.venv/bin/python -m pytest', '.venv/bin/pip install x', './venv/bin/python3.12 -m pytest -q', 'uv run pytest', 'uv pip install x', 'cd api && /usr/bin/python3 -m pip install -e .']) {
     expect(triageDeny({ tool: 'Bash', command: c }), c).toContain('no builds')
+  }
+  for (const c of ['cat src/make.md', 'git log -- tests/pytest.ini', 'echo uv']) {
+    expect(triageDeny({ tool: 'Bash', command: c }), c).toBeUndefined()
   }
   expect(triageDeny({ tool: 'Agent', model: 'haiku' })).toBeUndefined()
   expect(triageDeny({ tool: 'Agent' })).toBeUndefined()

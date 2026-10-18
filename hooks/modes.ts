@@ -16,7 +16,7 @@ const TRIGGERS: [Mode, RegExp][] = [
   ['review', /\breview mode\b|\b(review|code review) (this|the|my) (pr|diff|branch|changes?|commit|code)\b/i],
   ['focus', /\bfocus mode\b|\bfocus (only )?on (this|that|one thing)\b|\bstay focused\b/i],
 ]
-const EXIT = /\b(exit|leave|end|stop|clear) (the |this )?(\w+ )?mode\b|\bback to normal\b|\bdone triag/i
+const EXIT = /\b(exit|leave|end|stop|clear) (the |this )?(\w+ )?mode\b|\b(exit|leave|end|stop|clear) (the |this )?(focus|triage|review|budget|release)\b|\bback to normal\b|\bdone triag/i
 
 // A prompt that asks for a mode, or leaves one.
 export function modeFromPrompt(text: string): { mode?: Mode; exit?: boolean } {
@@ -28,7 +28,7 @@ export function modeFromPrompt(text: string): { mode?: Mode; exit?: boolean } {
 // Triage writes only to the inbox, so an edit anywhere else is refused.
 const INBOX_FILES = /(^|\/)(INBOX\.md|\.claude\/now\.md)$/
 // Commands that build, test, install or publish. Matched at the start of a command or after && ; | (best effort, not a sandbox).
-const BUILD = /(^|[;&|]\s*|\bxargs\s+)(npm (run|test|ci|install|i|publish)|npx|pnpm|yarn|bun (run|test|install|build)|make|cargo (build|test|run|install)|go (build|test|run|install)|pytest|python3? -m (pytest|pip|build)|pip3? install|tsc|gradle|\.\/gradlew|mvn|docker (build|run|compose)|dotnet (build|test|run)|(bash |\.\/)?scripts\/gate\.sh)/
+const BUILD = /(^|[;&|]\s*|\bxargs\s+)([\w.~$/-]*\/)?(npm (run|test|ci|install|i|publish)|npx|pnpm|yarn|bun (run|test|install|build)|make|cargo (build|test|run|install)|go (build|test|run|install)|pytest|python[0-9.]* -m (pytest|pip|build)|pip[0-9.]* install|uv (run|pip)|tsc|gradle|\.\/gradlew|mvn|docker (build|run|compose)|dotnet (build|test|run)|(bash |\.\/)?scripts\/gate\.sh)/
 
 // Why a call is refused in triage mode, or undefined when it is allowed.
 export function triageDeny(call: { tool: string; file_path?: string; command?: string; model?: string }): string | undefined {
