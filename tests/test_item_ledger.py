@@ -86,3 +86,8 @@ def test_the_command_line_adds_and_summarises_and_scan_py_reads_it(tmp_path):
         subprocess.run([sys.executable, str(ROOT / "scripts" / "item_ledger.py"), "add", "--type", "ui", "--rung", "haiku", "--rework", str(w), "--date", d, "--path", str(path), "restyle"], check=True, capture_output=True)
     out = subprocess.run([sys.executable, str(ROOT / "skills" / "upgrade-scan" / "scan.py"), "items", str(path)], check=True, capture_output=True, text=True).stdout
     assert '"to": "sonnet"' in out and '"items": 3' in out
+
+
+def test_the_top_rung_with_enough_rework_is_not_reported_as_short_of_evidence():
+    s = il.summary([lines(("2026-10-01", "bug", "opus", 1), ("2026-10-02", "bug", "opus", 1), ("2026-10-03", "bug", "opus", 1))])
+    assert s["moves"] == [] and s["watching"] == []

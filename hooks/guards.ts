@@ -11,7 +11,7 @@ export function forcePush(command: string): boolean {
 
 // CI definitions and Claude settings: unattended runs read them, never change them.
 const PROTECTED = /(^|[/\s'"=])(\.github\/(workflows|actions)\/|\.circleci\/|\.gitlab-ci\.ya?ml(?=$|[\s'";&|)])|\.travis\.yml(?=$|[\s'";&|)])|\.drone\.yml(?=$|[\s'";&|)])|bitbucket-pipelines\.yml(?=$|[\s'";&|)])|azure-pipelines[^/]*\.ya?ml(?=$|[\s'";&|)])|Jenkinsfile(?=$|[\s'";&|)])|\.claude\/settings(\.local)?\.json(?=$|[\s'";&|)]))/
-const WRITES = /(?:>|\btee\b|\bsed\s+-[a-zA-Z]*i|\bperl\s+-[a-zA-Z]*i|\bmv\b|\bcp\b|\brm\b|\btruncate\b|\bgit\s+(?:rm|mv|checkout|restore|apply)\b|\bpython3?\s+-c\b|\bnode\s+-e\b)/
+const WRITES = /(?:[0-9]?>>?(?!&|\s*\/dev\/null)|&>|\btee\b|\bsed\b[^;&|\n]*\s(?:-[a-zA-Z]*i|--in-place)|\bperl\b[^;&|\n]*\s-[a-zA-Z]*i|\bmv\b|\bcp\b|\brm\b|\btruncate\b|\bgit\s+(?:rm|mv|checkout|restore|apply)\b|\bpython3?\s+-c\b|\bnode\s+-e\b)/
 
 export function protectedPath(path: string): boolean {
   return PROTECTED.test(path.replace(/\\/g, '/'))

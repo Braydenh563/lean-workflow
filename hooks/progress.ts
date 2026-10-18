@@ -6,7 +6,7 @@ export type Order = { mode: string; status: string; done: number; total: number;
 const BOX = /^\s*[-*] \[([ xX])\]\s*(.*)$/
 
 export function parseOrder(text: string): Order | undefined {
-  const field = (name: string) => text.match(new RegExp(`^${name}:\\s*(.+)$`, 'm'))?.[1].trim()
+  const field = (name: string) => text.match(new RegExp(`^${name}:[ \\t]*(.+)$`, 'm'))?.[1].trim()
   const mode = field('mode')
   if (!mode) return undefined
   let done = 0

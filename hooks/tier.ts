@@ -44,7 +44,8 @@ export function tierNote(from: Tier, to: TierResult): string | undefined {
 }
 
 // "finish up at 60% weekly" or "once I get to 60% weekly usage, finish up": the line the user sets in words.
-const USAGE = /\b(usage|limit|quota|weekly|week|5.?h(our)?|five.?hour)\b/i
+const FIVE = /\b(5[ -]?h(ours?)?|five[ -]?hours?)\b/i
+const USAGE = /\b(usage|limit|quota|weekly|week)\b|\b5[ -]?h(ours?)?\b|\bfive[ -]?hours?\b/i
 const FINISH = '(?:finish(?:\\s+up)?|wrap(?:\\s+it)?(?:\\s+up)?|stop|stand\\s+down|pack\\s+up)'
 const A = new RegExp(`\\b${FINISH}\\b[^.\\n%]{0,50}?\\b(?:at|when|once|by|before|after)\\b[^.\\n%]{0,30}?(\\d{1,3})\\s*%`, 'i')
 const B = new RegExp(`\\b(?:at|when|once|by|after)\\b[^.\\n%]{0,40}?(\\d{1,3})\\s*%[^.\\n]{0,60}?\\b${FINISH}\\b`, 'i')
@@ -54,5 +55,5 @@ export function finishLine(text: string): { kind: 'week' | 'five'; pct: number }
   const m = A.exec(text) ?? B.exec(text)
   const pct = m ? Number(m[1]) : NaN
   if (!(pct >= 1 && pct <= 100)) return undefined
-  return { kind: /5.?h(our)?|five.?hour/i.test(text) ? 'five' : 'week', pct }
+  return { kind: FIVE.test(text) ? 'five' : 'week', pct }
 }

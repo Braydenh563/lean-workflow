@@ -5,6 +5,7 @@
 # and 60 minutes with no commit stops the run (status: stopped).
 input=$(cat)
 cwd=$(printf '%s' "$input" | sed -n 's/.*"cwd"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
+cwd=${cwd//\\\\/\\}; cwd=${cwd//\\\"/\"}  # unescape JSON \\ and \"
 order="${cwd:-.}/.claude/work-order.md"
 [ -f "$order" ] || exit 0
 field() { sed -n "s/^$1:[[:space:]]*//p" "$order" | head -1 | tr -d '\r'; }
@@ -19,7 +20,7 @@ idle=$(field max-idle-minutes); case "$idle" in ''|*[!0-9]*) idle=60;; esac
 now=${LEAN_NOW:-$(date +%s)}
 head=$(git -C "${cwd:-.}" rev-parse HEAD 2>/dev/null); head=${head:-none}
 last_file="${cwd:-.}/.claude/work-order.last"
-read -r last_head last_at < "$last_file" 2>/dev/null
+[ -f "$last_file" ] && read -r last_head last_at < "$last_file"
 if [ ! -f "$last_file" ]; then
   last_head=$head
   last_at=$(stat -c %Y "$order" 2>/dev/null || stat -f %m "$order" 2>/dev/null || echo "$now")

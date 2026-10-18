@@ -43,3 +43,12 @@ test('the text copy of a document lives under .claude/inputs', () => {
   expect(textCopyPath('docs/spec v2.pdf')).toBe('.claude/inputs/spec v2.pdf.txt')
   expect(textCopyPath('C:\\in\\plan.xlsx')).toBe('.claude/inputs/plan.xlsx.txt')
 })
+
+test('harmless redirects are not writes; flags before sed -i and perl -i are', () => {
+  for (const c of ['cat .github/workflows/ci.yml 2>&1', 'ls .github/workflows/ 2>/dev/null', 'grep uses .claude/settings.json > /dev/null']) {
+    expect(bashTouchesProtected(c), c).toBe(false)
+  }
+  for (const c of ['sed -E -i s/a/b/ .github/workflows/ci.yml', 'sed --in-place s/a/b/ .claude/settings.json', 'perl -p -i -e s/a/b/ .github/workflows/ci.yml', 'echo x 2> .claude/settings.json', 'cat a &> .claude/settings.json']) {
+    expect(bashTouchesProtected(c), c).toBe(true)
+  }
+})

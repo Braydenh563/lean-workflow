@@ -84,3 +84,12 @@ test('the plan table is consistent and the note names its figures', () => {
   expect(planNote('max20x')).toContain('finish up at 90% weekly or 95%')
   expect(planNote('api')).toContain('billed per token')
 })
+
+test('"15th" is not a 5-hour window', () => {
+  expect(finishLine('stop at 90% of my weekly usage on the 15th')).toEqual({ kind: 'week', pct: 90 })
+  expect(finishLine('stop at 90% of my 5 hour window')).toEqual({ kind: 'five', pct: 90 })
+})
+
+test('a user finish line below the budget line is the budget line too', () => {
+  expect(tierFor({ week: 65, finishWeek: 60 }).reason).toContain('stop from 60%')
+})

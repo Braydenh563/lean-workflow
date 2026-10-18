@@ -56,3 +56,7 @@ test('/progress reads the order, plans and inbox from the repo', async ($, on) =
   expect(text).toContain('[###.......] 1/4 docs/P.md')
 })
 
+
+test('an empty field does not take the next line as its value', async () => {
+  expect(parseOrder('mode: ship\nstatus: active\npr:\nstarted: x\n- [ ] a\n')?.pr).toBeUndefined()
+})

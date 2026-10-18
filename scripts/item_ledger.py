@@ -69,7 +69,7 @@ def moves(rows: list[dict]) -> dict:
             enough = s["n"] >= MIN_ITEMS and len(s["dates"]) >= MIN_DATES
             if rate >= REWORK_RATE and i < len(RUNGS) - 1 and enough:
                 out.append({"type": typ, "from": rung, "to": RUNGS[i + 1], "why": f"{s['reworked']} of {s['n']} {typ} items on {rung} needed rework ({len(s['dates'])} days)"})
-            elif rate >= REWORK_RATE:
+            elif rate >= REWORK_RATE and i < len(RUNGS) - 1:
                 watching.append(f"{typ} on {rung}: {s['reworked']} of {s['n']} reworked, not yet {MIN_ITEMS} items over {MIN_DATES} days")
             elif i > 0 and s["reworked"] == 0 and s["n"] >= MIN_DEMOTE and len(s["dates"]) >= MIN_DATES:
                 lower = by_rung.get(RUNGS[i - 1])

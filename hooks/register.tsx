@@ -166,7 +166,8 @@ const state = {
 
 // The weekly % where tier pro starts: the plan's, else the default 70.
 function proWeek(): number {
-  return planDefaults()?.proWeek || 70
+  // A user finish-up line below the plan's budget line pulls it down, as tierFor does.
+  return Math.min(planDefaults()?.proWeek || 70, state.finishWeek ?? state.opts.finishWeek ?? Infinity)
 }
 function planDefaults() {
   const p = planFrom(state.opts.plan)

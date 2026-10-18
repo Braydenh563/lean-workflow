@@ -102,3 +102,9 @@ def test_an_order_that_is_not_active_is_left_alone(tmp_path):
     path = started(tmp_path, "mode: continue\nstatus: done\n- [ ] a\n")
     assert stop(path, T0) == "" and stop(path, T0 + 10 * 3600) == ""
     assert status(path) == "status: done"
+
+
+def test_first_run_prints_nothing_on_stderr(tmp_path):
+    repo = order(tmp_path, "mode: continue\nstatus: active\n- [ ] a\n")
+    r = subprocess.run(["bash", str(SCRIPT)], input=json.dumps({"cwd": str(repo)}), capture_output=True, text=True, check=True)
+    assert r.stderr == "" and json.loads(r.stdout)["decision"] == "block"
