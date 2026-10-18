@@ -53,6 +53,7 @@ test('until counts down to a reset and is silent for a past or bad time', () => 
   expect(until('2026-10-20T05:30:00Z', now)).toBe('in 2d 5h')
   expect(until('2026-10-18T03:10:00Z', now)).toBe('in 3h 10m')
   expect(until('2026-10-18T00:20:00Z', now)).toBe('in 20m')
+  expect(until('2026-10-18T00:00:30Z', now)).toBe('in <1m')
   expect(until('2026-10-17T00:00:00Z', now)).toBeUndefined()
   expect(until('soon', now)).toBeUndefined()
   expect(until(undefined, now)).toBeUndefined()

@@ -62,8 +62,8 @@ export function detectPlan(statusJson: string): Plan | undefined {
   if (/enterprise/.test(text)) return 'enterprise'
   if (/\bteam/.test(text)) return 'team'
   if (/max/.test(text)) return /20x/.test(text) ? 'max20x' : 'max5x'
-  if (/\bpro\b/.test(text)) return 'pro'
-  if (/\bfree\b/.test(text)) return 'free'
+  if (/(^|[^a-z])pro([^a-z]|$)/.test(text)) return 'pro'
+  if (/(^|[^a-z])free([^a-z]|$)/.test(text)) return 'free'
   const provider = String(s.apiProvider ?? s.api_provider ?? '')
   if ((provider && provider !== 'firstParty') || /api.?key/i.test(String(s.authMethod ?? s.auth_method ?? ''))) return 'api'
   return undefined

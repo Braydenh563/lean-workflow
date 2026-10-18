@@ -109,3 +109,7 @@ test('detectPlan reads the plan from auth status JSON and leaves the unknown to 
   expect(detectPlan('not json')).toBeUndefined()
   expect(detectPlan('null')).toBeUndefined()
 })
+
+test('detectPlan reads claude_pro style values', () => {
+  expect(detectPlan(JSON.stringify({ subscriptionType: 'claude_pro' }))).toBe('pro')
+})

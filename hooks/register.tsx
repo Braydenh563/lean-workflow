@@ -387,7 +387,7 @@ export const register: Register = (on, options) => {
       bigPaste(e.text.length),
       bigImage({ count: images.length, bytes }),
       usage && longSession({ ageMs: now - usage.startedAt, turns: s.turns, ctx: usage.context.tokens ?? s.ctx }),
-      usage && weeklyLimit(usage.rateLimits, now),
+      usage && weeklyLimit(usage.rateLimits, now, proWeek()),
       prNudge,
     ])
     if (shown.length) $.ui.toast(shown.map(t => `${$.plugin.name}: ${t}`).join('\n'))
@@ -459,7 +459,7 @@ export const register: Register = (on, options) => {
       }
       const [shown] = coach.offer([
         ctx > BIG_CONTEXT ? longSession({ ageMs: 0, turns: s.turns, ctx }) : undefined,
-        s.week === undefined ? undefined : weeklyLimit([{ kind: 'seven_day', percentUsed: s.week, resetsAt: s.weekResets }], await $.clock.now()),
+        s.week === undefined ? undefined : weeklyLimit([{ kind: 'seven_day', percentUsed: s.week, resetsAt: s.weekResets }], await $.clock.now(), proWeek()),
       ], 1)
       if (shown) {
         $.ui.toast(`${$.plugin.name}: ${shown}`)

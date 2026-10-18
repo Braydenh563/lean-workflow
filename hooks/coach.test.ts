@@ -226,3 +226,11 @@ test('fan-out follows the plan\'s agent cap: one agent allowed, so the second al
   expect(fanOut(3, 3)).toBeUndefined()
   expect(fanOut(4, 3)?.habit).toBe('fanOut')
 })
+
+test('the weekly-limit nudge starts at the plan\'s budget line', () => {
+  const at = (pct: number, line?: number) => weeklyLimit([{ kind: 'seven_day', percentUsed: pct }], NOW, line)
+  expect(at(55, 50)?.habit).toBe('weeklyLimit')
+  expect(at(55)).toBeUndefined()
+  expect(at(72, 75)).toBeUndefined()
+  expect(at(75, 75)?.habit).toBe('weeklyLimit')
+})

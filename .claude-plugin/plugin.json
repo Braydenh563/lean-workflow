@@ -35,20 +35,18 @@
     "tier": {
       "type": "string",
       "title": "Tier",
-      "description": "max or pro (overrides the plan's starting tier). The live limits raise it on their own: pro at 70% weekly (one agent, no Opus, budget mode), stop at your finish-up line.",
-      "default": "max"
+      "description": "max or pro (overrides the plan's starting tier). The live limits raise it on their own: pro at the plan's budget line (70% weekly by default), stop at your finish-up line. Leave empty to follow the plan.",
+      "default": ""
     },
     "finishAtWeek": {
       "type": "number",
       "title": "Finish up at weekly %",
-      "description": "Weekly usage at which the model is told to finish the step, commit, push and stop (an active work order is marked stopped). You can also say it in a prompt: \"finish up at 60% weekly\".",
-      "default": 85
+      "description": "Weekly usage at which the model is told to finish the step, commit, push and stop (an active work order is marked stopped). Empty follows the plan (85 by default). You can also say it in a prompt: \"finish up at 60% weekly\"."
     },
     "finishAtFiveHour": {
       "type": "number",
       "title": "Finish up at 5-hour %",
-      "description": "Same, for the 5-hour window.",
-      "default": 90
+      "description": "Same, for the 5-hour window. Empty follows the plan (90 by default)."
     },
     "coachOff": {
       "type": "string",

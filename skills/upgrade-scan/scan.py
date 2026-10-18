@@ -158,14 +158,18 @@ def parse_notes(text: str, since: str | None = None) -> dict:
 
 
 def page_report(pages: dict[str, str], known: dict[str, str]) -> dict:
-    """Per page: its hash, whether it differs from the last scan's, and the lines that talk about limits, plans or models."""
+    """Per page: its hash, whether it differs from the last scan's, and the sentences that talk about limits, plans or models.
+    Sentences with a figure (digits with %, x, hours, messages) come first, so a number is not cut off by prose."""
     out = {}
     for name, text in pages.items():
         digest = hashlib.sha256(re.sub(r"\s+", " ", text).strip().encode()).hexdigest()[:16]
+        parts = [p.strip() for line in text.splitlines() for p in re.split(r"(?<=[.!?])\s+", line) if PLAN_LINES.search(p)]
+        parts = [p[:300] for p in parts]
+        parts.sort(key=lambda p: not re.search(r"\d+\s*(%|x\b|hours?|messages?|tokens?|days?)", p, re.I))
         out[name] = {
             "hash": digest,
             "status": "new" if name not in known else "unchanged" if known[name] == digest else "changed",
-            "lines": [l.strip()[:200] for l in text.splitlines() if PLAN_LINES.search(l)][:40],
+            "lines": parts[:40],
         }
     return out
 

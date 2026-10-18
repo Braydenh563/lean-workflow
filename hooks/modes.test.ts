@@ -18,7 +18,7 @@ test('a prompt asks for a mode by its trigger words, and leaves it with "exit"',
   expect(m('what is the release process in this repo')).toBeUndefined()
   expect(modeFromPrompt('exit triage mode').exit).toBe(true)
   expect(modeFromPrompt('back to normal').exit).toBe(true)
-  for (const t of ['exit triage', 'leave focus', 'stop the budget', 'end review', 'clear release', 'Exit triage please']) {
+  for (const t of ['exit triage', 'leave focus', 'stop the budget', 'end review mode', 'clear release mode', 'Exit triage please']) {
     expect(modeFromPrompt(t).exit, t).toBe(true)
   }
   expect(modeFromPrompt('exit the parser').exit).toBeUndefined()
@@ -47,4 +47,30 @@ test('triage allows the inbox and haiku, and refuses edits elsewhere, builds and
   expect(triageDeny({ tool: 'Agent' })).toBeUndefined()
   expect(triageDeny({ tool: 'Agent', model: 'sonnet' })).toContain('Haiku agents only')
   expect(triageDeny({ tool: 'Read', file_path: 'src/app.ts' })).toBeUndefined()
+})
+
+test('exit and mode words in ordinary sentences are not mode commands', () => {
+  for (const t of ['clear the budget numbers', 'stop review of the diff', 'stop the release', 'end the release notes', "don't exit triage yet", 'stop the server mode']) {
+    expect(modeFromPrompt(t).exit, t).toBeUndefined()
+  }
+  for (const t of ['exit triage.', 'leave focus mode now', 'stop the budget mode', 'end this mode']) expect(modeFromPrompt(t).exit, t).toBe(true)
+  const m = (t: string) => modeFromPrompt(t).mode
+  for (const t of ['please make the release script faster', 'do the release notes', 'triage mode off', 'not triage mode', 'What does triage mode do?', 'the focus mode skill is broken', 'review this commit message']) {
+    expect(m(t), t).toBeUndefined()
+  }
+  expect(m('review the pull request')).toBe('review')
+  expect(m('review my pull request')).toBe('review')
+  expect(m('prepare release')).toBe('release')
+  expect(m("let's triage")).toBe('triage')
+  expect(m('please triage')).toBe('triage')
+})
+
+test('triage lets harmless commands through, and catches builds behind prefixes', () => {
+  const deny = (c: string) => triageDeny({ tool: 'Bash', command: c })
+  for (const c of ['npm info lodash', 'npm init -y', './makedocs.sh', 'makepkg', 'tsc-watch', 'yarn --version', 'npx --version', 'pytest --version', 'docker run --help', 'docker compose ps', 'git commit -m "fix make; go build"']) {
+    expect(deny(c), c).toBeUndefined()
+  }
+  for (const c of ['sh scripts/gate.sh', 'FOO=1 npm test', 'env FOO=1 make', 'sudo make', 'time make', '(npm test)', 'echo $(make)', 'deno test', 'bundle install', 'uv sync', 'poetry install', 'node --test']) {
+    expect(deny(c), c).toContain('no builds')
+  }
 })

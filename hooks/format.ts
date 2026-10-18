@@ -53,6 +53,7 @@ export function weekTrend(history: readonly { week?: number }[], current?: numbe
 export function until(iso: string | undefined, now: number): string | undefined {
   const ms = Date.parse(iso ?? '') - now
   if (!Number.isFinite(ms) || ms <= 0) return undefined
+  if (ms < 60_000) return 'in <1m'
   const m = Math.floor(ms / 60_000)
   const d = Math.floor(m / 1440)
   const h = Math.floor((m % 1440) / 60)

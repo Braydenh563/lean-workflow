@@ -157,13 +157,14 @@ export function fanOut(spawned: number, cap?: number): Nudge | undefined {
 
 export type Limit = { kind: string; percentUsed: number; resetsAt?: string }
 // Weekly window: over the threshold, or well ahead of an even burn through the week.
-export function weeklyLimit(limits: readonly Limit[], now: number): Nudge | undefined {
+// `budgetAt` is the plan's budget line; without one the default applies.
+export function weeklyLimit(limits: readonly Limit[], now: number, budgetAt: number = LIMITS.weeklyPct): Nudge | undefined {
   const w = limits.find(l => l.kind === 'seven_day')
   if (!w) return undefined
   const resets = w.resetsAt ? Date.parse(w.resetsAt) : NaN
   const elapsed = Number.isFinite(resets) ? Math.min(100, Math.max(0, 100 * (1 - (resets - now) / WEEK_MS))) : undefined
   const ahead = elapsed === undefined ? 0 : w.percentUsed - elapsed
-  if (w.percentUsed < LIMITS.weeklyPct && !(w.percentUsed >= 50 && ahead >= LIMITS.weeklyAhead)) return undefined
+  if (w.percentUsed < budgetAt && !(w.percentUsed >= 50 && ahead >= LIMITS.weeklyAhead)) return undefined
   const cut = (a: 'haiku' | 'sonnet' | 'opus', b: 'haiku' | 'sonnet' | 'opus') => Math.round(100 * (1 - RATE[b] / RATE[a]))
   const pace = elapsed === undefined ? '' : ` (${Math.round(elapsed)}% of the week gone)`
   const reset = Number.isFinite(resets) ? ` Big runs can wait for the reset at ${new Date(resets).toISOString().slice(0, 16)}Z.` : ''

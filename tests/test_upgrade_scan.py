@@ -156,3 +156,10 @@ def test_plan_pages_are_recorded_and_the_skill_and_table_name_each_other():
     skill = (SKILL / "SKILL.md").read_text()
     assert "scan.py pages" in skill and "PLANS_VERIFIED" in skill
     assert re.search(r"PLANS_VERIFIED = '\d{4}-\d\d-\d\d'", (ROOT / "hooks" / "plans.ts").read_text())
+
+
+def test_page_report_puts_figures_first_and_splits_one_line_pages():
+    page = "\n".join(f"Team seat note {n}" for n in range(60)) + "\nMax 20x weekly limit is 900 messages"
+    assert scan.page_report({"p": page}, {})["p"]["lines"][0] == "Max 20x weekly limit is 900 messages"
+    flat = "<p>" + "Team intro. " * 40 + "The weekly limit is 50 hours.</p>"
+    assert any("50 hours" in l for l in scan.page_report({"p": flat}, {})["p"]["lines"][:3])

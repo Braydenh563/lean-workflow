@@ -85,9 +85,9 @@ Nine habits are watched. Each nudge shows **once per session** (at most two per 
 | Big paste | A prompt over 20,000 characters | Save to a file, grep it, read a line range |
 | Images | 2 or more images, or one over 1 MB | Crop to the problem, or state the numbers |
 | Idle gap | 55 minutes since the last turn (the prompt cache has likely expired) | Fresh session from the handover |
-| Weekly limit | The `seven_day` window is 70% used, or 50% used and 20 points ahead of an even burn | Cheaper rungs; big runs wait for the reset |
+| Weekly limit | The `seven_day` window is at the plan's budget line (70% by default), or 50% used and 20 points ahead of an even burn | Cheaper rungs; big runs wait for the reset |
 | Re-reads | The same file read whole 3 times (a ranged read does not count) | Put the facts in `now.md`, or grep and read a line range |
-| Agent fan-out | 4 or more `Agent` calls in one prompt | One haiku scout to locate, then at most two builders |
+| Agent fan-out | 4 or more `Agent` calls in one prompt (one more than the plan's agent cap, when that is lower) | One haiku scout to locate, then at most two builders |
 
 `/coach` reports each habit's count this session and in your stored sessions (the last 30), the estimated tokens the nudges flagged (what they pointed at, not spend saved), and the trend: the older half of those sessions against the newer half, once there are four. **Where the dashboard shows.** A pane (the "sidebar") is drawn only by the terminal, the desktop app, VS Code and the mobile app; the plugin API has no pane for the browser at claude.ai/code, and that client may not route plugin slash commands at all. For those the plugin also registers a tool, `mcp__lean-workflow__view` (`dash`, `progress`, `spend`, `coach`, `brief`), and the autopilot tells the model to call it and show the text when you ask for the dashboard.
 
@@ -184,8 +184,8 @@ Set under the plugin's options.
 | `coachOff` | empty | Comma-separated habits the coach should not count or show, e.g. `bigImage, idleGap` |
 | `plan` | empty | `free`, `pro`, `max5x`, `max20x`, `team`, `enterprise` or `api`; sets the defaults in the plan table |
 | `tier` | plan's, else `max` | `max` or `pro`; the live limits raise it on their own |
-| `finishAtWeek` | 85 | Weekly % at which the model is told to finish up, push and stop |
-| `finishAtFiveHour` | 90 | Same for the 5-hour window |
+| `finishAtWeek` | plan's (85) | Weekly % at which the model is told to finish up, push and stop |
+| `finishAtFiveHour` | plan's (90) | Same for the 5-hour window |
 
 ## Status and limits
 
