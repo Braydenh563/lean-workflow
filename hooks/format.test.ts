@@ -1,6 +1,6 @@
 import { test, expect } from 'claude-code/testing'
 
-import { bar, dashText, spark, weekTrend } from './format'
+import { bar, dashText, k, spark, until, weekTrend } from './format'
 
 test('bar is fixed width, clamped, and shows a block for any non-zero value', () => {
   expect(bar(0.5, 10)).toBe('█████░░░░░')
@@ -39,4 +39,35 @@ test('weekTrend needs two readings and reports the drift', () => {
   expect(weekTrend([{ week: 80 }], 20)).toContain('(-60)')
   const many = Array.from({ length: 20 }, (_, i) => ({ week: i }))
   expect(weekTrend(many, 50)).toContain('over 12 readings')
+})
+
+test('k keeps small numbers exact', () => {
+  expect(k(0)).toBe('0')
+  expect(k(480)).toBe('480')
+  expect(k(12_400)).toBe('12k')
+  expect(k(2_500_000)).toBe('2.5M')
+})
+
+test('until counts down to a reset and is silent for a past or bad time', () => {
+  const now = Date.parse('2026-10-18T00:00:00Z')
+  expect(until('2026-10-20T05:30:00Z', now)).toBe('in 2d 5h')
+  expect(until('2026-10-18T03:10:00Z', now)).toBe('in 3h 10m')
+  expect(until('2026-10-18T00:20:00Z', now)).toBe('in 20m')
+  expect(until('2026-10-17T00:00:00Z', now)).toBeUndefined()
+  expect(until('soon', now)).toBeUndefined()
+  expect(until(undefined, now)).toBeUndefined()
+})
+
+test('the limit bars use the plan\'s lines and show the points left', () => {
+  const base = {
+    stats: { turns: 1, calls: 1, denies: 0, ctx: 1000, agents: 0, week: 72, fiveHour: 90, weekResets: '2026-10-20T03:00:00Z' },
+    agents: [], tasks: [], costs: [], split: { reads: 0, writes: 0, output: 0 }, now: Date.parse('2026-10-18T00:00:00Z'), advice: 'x', trend: 't', bigContext: 150_000,
+  }
+  const out = dashText({ ...base, limits: { tier: 'max', tierReason: 'under every limit', weekTrend: 'w', plan: 'max20x', lines: { proWeek: 75, stopWeek: 90, stopFive: 95 } } })
+  expect(out).toContain('weekly  🟢')
+  expect(out).toContain('18 to the finish-up line (90%)')
+  expect(out).toContain('(in 2d 3h)')
+  expect(out).toContain('5-hour  🟡')
+  expect(out).toContain('plan max20x · tier max')
+  expect(dashText({ ...base, limits: { tier: 'stop', tierReason: 'r', weekTrend: 'w', lines: { stopWeek: 60 } } })).toContain('weekly  🔴')
 })

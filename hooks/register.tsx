@@ -222,6 +222,8 @@ async function dashView($: ProgressHost & Store): Promise<string> {
       tierReason: tierNow(s).reason,
       mode: (await read($, modeA)) || undefined,
       weekTrend: weekTrend(history, s.week),
+      plan: planFrom(state.opts.plan),
+      lines: { proWeek: proWeek(), stopWeek: state.finishWeek ?? state.opts.finishWeek ?? planDefaults()?.stopWeek, stopFive: state.finishFive ?? state.opts.finishFive ?? planDefaults()?.stopFive },
     },
   }) + '\n\n' + (await progress($))
 }

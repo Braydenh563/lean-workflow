@@ -2,7 +2,8 @@ import type { AgentRow, Stats, TaskRow } from '../types'
 import { TIER_LIMITS } from './tier'
 
 export type CostRow = { model: string; share: number; turns: number; out: number }
-export type LimitsView = { tier: string; tierReason: string; mode?: string; weekTrend: string }
+// `lines` are the plan's (or the user's) budget and finish-up percentages; without them the defaults apply.
+export type LimitsView = { tier: string; tierReason: string; mode?: string; weekTrend: string; plan?: string; lines?: { proWeek?: number; stopWeek?: number; stopFive?: number } }
 export type DashInput = {
   stats: Stats
   agents: AgentRow[]
@@ -19,7 +20,7 @@ export type DashInput = {
 const WIDTH = 20
 
 export function k(n: number): string {
-  return n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : `${Math.round(n / 1000)}k`
+  return n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n < 1000 ? `${Math.round(n)}` : `${Math.round(n / 1000)}k`
 }
 
 // A fixed-width block bar; frac is clamped to 0..1 and a non-zero value shows at least one block.
@@ -48,10 +49,22 @@ export function weekTrend(history: readonly { week?: number }[], current?: numbe
   return `week trend ${spark(points)} ${points[0]}% → ${points[points.length - 1]}% over ${points.length} readings (${delta >= 0 ? '+' : ''}${delta})`
 }
 
-function limitLine(name: string, pct: number | undefined, extra = ''): string {
+// "in 2d 5h" / "in 3h 10m" until an ISO reset time; undefined when it is unparseable or past.
+export function until(iso: string | undefined, now: number): string | undefined {
+  const ms = Date.parse(iso ?? '') - now
+  if (!Number.isFinite(ms) || ms <= 0) return undefined
+  const m = Math.floor(ms / 60_000)
+  const d = Math.floor(m / 1440)
+  const h = Math.floor((m % 1440) / 60)
+  return d > 0 ? `in ${d}d ${h}h` : h > 0 ? `in ${h}h ${m % 60}m` : `in ${m}m`
+}
+
+// One bar, coloured by the budget line (yellow) and the finish-up line (red), with the points left before the finish-up line.
+function limitLine(name: string, pct: number | undefined, warn: number, stop: number, extra = ''): string {
   if (pct === undefined) return `  ${name}  not reported by this host`
-  const level = pct >= TIER_LIMITS.stopWeek ? '🔴' : pct >= TIER_LIMITS.proWeek ? '🟡' : '🟢'
-  return `  ${name}  ${level} ${bar(pct / 100)} ${pct}%${extra}`
+  const level = pct >= stop ? '🔴' : pct >= warn ? '🟡' : '🟢'
+  const left = Number.isFinite(stop) ? (pct >= stop ? ' · at the finish-up line' : ` · ${stop - pct} to the finish-up line (${stop}%)`) : ''
+  return `  ${name}  ${level} ${bar(pct / 100)} ${pct}%${left}${extra}`
 }
 
 // Plain unicode, no markdown and no column alignment, so it reads the same in a terminal and in a proportional-font chat.
@@ -75,10 +88,10 @@ export function dashText(d: DashInput): string {
     `  ${d.trend}`,
     '',
     rule('Limits (live from the host)'),
-    limitLine('5-hour', s.fiveHour),
-    limitLine('weekly', s.week, s.weekResets ? ` · resets ${s.weekResets.slice(0, 16).replace('T', ' ')}` : ''),
+    limitLine('5-hour', s.fiveHour, (d.limits.lines?.stopFive ?? TIER_LIMITS.stopFive) - 10, d.limits.lines?.stopFive ?? TIER_LIMITS.stopFive),
+    limitLine('weekly', s.week, d.limits.lines?.proWeek ?? TIER_LIMITS.proWeek, d.limits.lines?.stopWeek ?? TIER_LIMITS.stopWeek, s.weekResets ? ` · resets ${s.weekResets.slice(0, 16).replace('T', ' ')}${until(s.weekResets, d.now) ? ` (${until(s.weekResets, d.now)})` : ''}` : ''),
     `  ${d.limits.weekTrend}`,
-    `  tier ${d.limits.tier} (${d.limits.tierReason})${d.limits.mode ? ` · mode ${d.limits.mode}` : ''}`,
+    `  ${d.limits.plan ? `plan ${d.limits.plan} · ` : ''}tier ${d.limits.tier} (${d.limits.tierReason})${d.limits.mode ? ` · mode ${d.limits.mode}` : ''}`,
     '',
     rule('Activity'),
     `  ${s.turns} turns · ${s.calls} tool calls · ${s.agents} agents · ${s.denies} blocked`,
