@@ -2,6 +2,10 @@
 // Pure rules. The thresholds are this plugin's own defaults: Anthropic publishes no per-plan numbers, only that
 // Pro and Max have a five-hour session limit and a weekly limit shared by Claude and Claude Code (see README).
 export type Plan = 'free' | 'pro' | 'max5x' | 'max20x' | 'team' | 'enterprise' | 'api'
+// When the table was last checked against the pages in the README; upgrade-scan moves it in its PR.
+export const PLANS_VERIFIED = '2026-10-18'
+const STALE_DAYS = 90
+
 export const PLANS: Plan[] = ['free', 'pro', 'max5x', 'max20x', 'team', 'enterprise', 'api']
 
 export type PlanDefaults = {
@@ -32,11 +36,13 @@ export function planFrom(text: string | undefined): Plan | undefined {
 }
 
 // What the model is told about its plan, once, in the autopilot.
-export function planNote(plan: Plan | undefined): string | undefined {
+export function planNote(plan: Plan | undefined, now?: number): string | undefined {
   if (!plan) return undefined
   const d = PLAN_DEFAULTS[plan]
   const limits = d.stopWeek === undefined ? 'no five-hour or weekly window (billed per token)' : `budget mode from ${d.proWeek}% weekly, finish up at ${d.stopWeek}% weekly or ${d.stopFive}% of the 5-hour window`
   const agents = d.base === 'pro' ? 'one agent at a time, no Opus agents unless named' : `up to ${d.agents} agents at once, ${d.opus ? 'one Opus' : 'no Opus'}`
   const checkin = d.checkinMinutes ? `check-in loops no more than every ${d.checkinMinutes} minutes` : 'no check-in loops; wait on PR events or do the next item'
-  return `Plan ${plan}: ${agents}; ${checkin}; ${limits}.`
+  const age = now === undefined ? 0 : Math.floor((now - Date.parse(PLANS_VERIFIED)) / 86_400_000)
+  const stale = age > STALE_DAYS ? ` The plan table was last checked ${PLANS_VERIFIED} (${age} days ago): plan limits change, so trust the live bars over these lines and tell the user the table needs a check (upgrade-scan).` : ''
+  return `Plan ${plan}: ${agents}; ${checkin}; ${limits}.${stale}`
 }

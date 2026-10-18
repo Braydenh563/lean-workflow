@@ -1,6 +1,6 @@
 import { test, expect } from 'claude-code/testing'
 
-import { PLAN_DEFAULTS, planFrom, planNote } from './plans'
+import { PLAN_DEFAULTS, PLANS_VERIFIED, planFrom, planNote } from './plans'
 import { finishLine, tierFor, tierNote } from './tier'
 
 test('tier follows the weekly and 5-hour limits, and only ever rises from the configured tier', () => {
@@ -83,6 +83,8 @@ test('the plan table is consistent and the note names its figures', () => {
   expect(planNote('max20x')).toContain('up to 3 agents')
   expect(planNote('max20x')).toContain('finish up at 90% weekly or 95%')
   expect(planNote('api')).toContain('billed per token')
+  expect(planNote('pro', Date.parse(PLANS_VERIFIED) + 10 * 86_400_000)).not.toContain('last checked')
+  expect(planNote('pro', Date.parse(PLANS_VERIFIED) + 120 * 86_400_000)).toContain('120 days ago')
 })
 
 test('"15th" is not a 5-hour window', () => {

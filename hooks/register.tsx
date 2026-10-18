@@ -588,7 +588,7 @@ export const register: Register = (on, options) => {
 
   on('prompt.compose', async ($, e, next) => {
     const r = await next(e)
-    return { ...r, sections: [...r.sections, { id: 'lean-workflow-autopilot', text: [AUTOPILOT, planNote(planFrom(state.opts.plan))].filter(Boolean).join('\n'), scope: 'shared' as const }] }
+    return { ...r, sections: [...r.sections, { id: 'lean-workflow-autopilot', text: [AUTOPILOT, planNote(planFrom(state.opts.plan), state.opts.plan ? await Promise.resolve().then(() => $.clock.now()).catch(() => undefined) : undefined)].filter(Boolean).join('\n'), scope: 'shared' as const }] }
   }).catch(($, e, next) => next(e))
 
 

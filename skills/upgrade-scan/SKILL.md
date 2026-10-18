@@ -15,6 +15,8 @@ Run from a checkout of the lean-workflow repo, on a fresh branch `upgrade-scan/<
 4. **Claude Code changelog.** `curl -sSL https://raw.githubusercontent.com/anthropics/claude-code/main/CHANGELOG.md -o <scratch>/cc.md`, then `python skills/upgrade-scan/scan.py changelog <scratch>/cc.md` (default `--since` is the version in `last-scan.json`). The file is about 1 MB: never read it whole. The command keeps versions after that one and only the lines that touch hooks, plugins, skills, agents, usage limits, cache or compaction, or models, each tagged with its topics. These lines are the evidence for the "Hooks" row below.
 5. **Plugin API types.** Take the current types (`.claude-plugin/types/claude-code/index.d.ts` after a load, or the plugin-authoring skill's `types/claude-code.d.ts`) and run `python skills/upgrade-scan/scan.py api <that file> --diff`. Added and removed events and types are the evidence; read the declaration of each before using it.
 
+6. **Plan pages.** The plan table in `hooks/plans.ts` rests on the pages in `last-scan.json` `sources` (the Pro/Max and Team/Enterprise articles, the Claude Code costs page, pricing, the models overview). Save each (`curl -sSL <url> -o <scratch>/<name>.html`), then `python skills/upgrade-scan/scan.py pages pro_max_plan=<file> team_enterprise_plan=<file> costs=<file> pricing=<file> models_overview=<file>`. A page marked `changed` (or `new`) is read for its limit, plan and model lines; an unfetchable page is a gap, not a reason to keep or change a number. If a page is moved or renamed, find its successor from the support or docs index and update `PLAN_PAGES` in `scan.py` and the README links in the same PR. Run `pages ... --write` after the PR is opened.
+
 After the scan's PR is opened, record what was read so the next scan starts there: `python skills/upgrade-scan/scan.py last --write --claude-code <newest version> --notes <newest date>` (both are in the `newest` field of the outputs above), and commit `last-scan.json` in the same PR. `last-scan.json` also holds the two source URLs. The first scan after 1.6.0 starts from the baseline written then; pass `--since` to look further back.
 
 If a source cannot be fetched, say so in the PR. A missing source is a gap, not a reason to guess.
@@ -27,6 +29,7 @@ Only these files, only on evidence:
 | --- | --- | --- |
 | Routing table | rungs in `skills/lean-setup/SKILL.md`; `AUTOPILOT` and `PINNED` in `hooks/register.tsx`; `model:` in `agents/*.md` | A release note naming the model change, **or** two or more ledger lines showing a rung mismatch (Opus on mechanical work, Haiku output redone) |
 | Task-type rungs | the rung sentence in `skills/lean-setup/SKILL.md` ("Haiku for lookup..., Sonnet for implementation...") and the rung table in `skills/work/SKILL.md` | A `move` from `scan.py items`, quoted with its counts. One move per task type per scan; a move up is applied before a move down |
+| Plan table | `PLAN_DEFAULTS` and `PLANS_VERIFIED` in `hooks/plans.ts`; the plan table and links in `README.md` | A `changed` plan page, quoted: a new plan or tier, a new or renamed limit (a new per-model weekly limit, say), a documented number. Always move `PLANS_VERIFIED` to the scan date, even when no number changes |
 | Prices | `RATE` in `hooks/coach.ts` | The pricing page, quoted. Ratios only |
 | Coach thresholds | `LIMITS` in `hooks/coach.ts` | Two or more sessions of `/coach` counts or ledger lines. A threshold that never fires or always fires |
 | Hooks | `hooks/register.tsx` | An API diff entry (new event that replaces a workaround, removed or renamed event the hooks use), or a Claude Code release note about a behaviour the hooks rely on |
@@ -47,7 +50,7 @@ A change with one ledger line or no quote is not proposed; list it under "Watchi
 
 ```
 ## Scan <date>
-Sources read: <retro ledgers (n lines)>, <item ledgers (n items)>, <model notes URL, entries since DATE>, <Claude Code vX..vY>, <API types build>
+Sources read: <retro ledgers (n lines)>, <plan pages: changed/unchanged>, <item ledgers (n items)>, <model notes URL, entries since DATE>, <Claude Code vX..vY>, <API types build>
 Sources missing: <none | which>
 
 ## Changes

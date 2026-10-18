@@ -141,3 +141,18 @@ def test_skill_reads_both_release_sources_with_the_helpers():
     text = (SKILL / "SKILL.md").read_text()
     for part in ("scan.py changelog", "scan.py notes", "scan.py items", "last-scan.json", "item-ledger"):
         assert part in text, part
+
+
+def test_pages_report_flags_new_changed_and_unchanged_and_keeps_limit_lines():
+    a = "Intro\nBoth plans have a five-hour session limit\nunrelated"
+    first = scan.page_report({"p": a}, {})
+    assert first["p"]["status"] == "new" and first["p"]["lines"] == ["Both plans have a five-hour session limit"]
+    assert scan.page_report({"p": a + "  "}, {"p": first["p"]["hash"]})["p"]["status"] == "unchanged"
+    assert scan.page_report({"p": a + "\nweekly limit"}, {"p": first["p"]["hash"]})["p"]["status"] == "changed"
+
+
+def test_plan_pages_are_recorded_and_the_skill_and_table_name_each_other():
+    assert all(u.startswith("https://") for u in scan.PLAN_PAGES.values())
+    skill = (SKILL / "SKILL.md").read_text()
+    assert "scan.py pages" in skill and "PLANS_VERIFIED" in skill
+    assert re.search(r"PLANS_VERIFIED = '\d{4}-\d\d-\d\d'", (ROOT / "hooks" / "plans.ts").read_text())

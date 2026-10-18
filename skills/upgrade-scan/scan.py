@@ -8,10 +8,12 @@
   scan.py items LEDGER [LEDGER ...]  per-item ledgers (scripts/item_ledger.py): rework by task type and rung, and rung moves
   scan.py changelog FILE [--since X.Y.Z]   the Claude Code CHANGELOG.md: versions after X.Y.Z, only the lines that touch this plugin
   scan.py notes FILE [--since YYYY-MM-DD]  Anthropic release notes (.md): dated entries after the date, only model, price and retirement lines
+  scan.py pages NAME=FILE [NAME=FILE ...] [--write]   saved plan-limit and pricing pages: changed since the last scan (by hash), and the limit/plan/model lines
   scan.py last [--write --claude-code X.Y.Z --notes YYYY-MM-DD]   what the last scan read (last-scan.json)
 
 Both sources are about a megabyte: never print or read them whole; these commands keep the matching lines.
 """
+import hashlib
 import json
 import re
 import statistics
@@ -25,6 +27,15 @@ SOURCES = {
     "claude_code_changelog": "https://raw.githubusercontent.com/anthropics/claude-code/main/CHANGELOG.md",
     "anthropic_release_notes": "https://platform.claude.com/docs/en/release-notes/overview.md",
 }
+# Pages the plan table in hooks/plans.ts rests on; `pages` hashes them so a rewrite is noticed.
+PLAN_PAGES = {
+    "pro_max_plan": "https://support.claude.com/en/articles/11145838-use-claude-code-with-your-pro-or-max-plan",
+    "team_enterprise_plan": "https://support.claude.com/en/articles/11845131-use-claude-code-with-your-team-or-enterprise-plan",
+    "costs": "https://code.claude.com/docs/en/costs",
+    "pricing": "https://claude.com/pricing",
+    "models_overview": "https://platform.claude.com/docs/en/about-claude/models/overview",
+}
+PLAN_LINES = re.compile(r"limit|five.hour|5.hour|weekly|session|seat|usage credit|max 5x|max 20x|\bpro\b|team|enterprise|opus|sonnet|haiku|fable|deprecat|retire", re.I)
 COLS = ["date", "branch", "tier", "orchestrator", "turns", "ctx", "cost", "agents", "delivered", "signal", "rule"]
 
 
@@ -146,6 +157,19 @@ def parse_notes(text: str, since: str | None = None) -> dict:
     return {"newest": max((e["date"] for e in out), default=since), "entries": [e for e in out if e["hits"]], "scanned": len(out)}
 
 
+def page_report(pages: dict[str, str], known: dict[str, str]) -> dict:
+    """Per page: its hash, whether it differs from the last scan's, and the lines that talk about limits, plans or models."""
+    out = {}
+    for name, text in pages.items():
+        digest = hashlib.sha256(re.sub(r"\s+", " ", text).strip().encode()).hexdigest()[:16]
+        out[name] = {
+            "hash": digest,
+            "status": "new" if name not in known else "unchanged" if known[name] == digest else "changed",
+            "lines": [l.strip()[:200] for l in text.splitlines() if PLAN_LINES.search(l)][:40],
+        }
+    return out
+
+
 def read_last() -> dict:
     return json.loads(LAST.read_text()) if LAST.exists() else {"claude_code": None, "notes": None, "sources": SOURCES}
 
@@ -155,7 +179,7 @@ def flag(argv: list[str], name: str) -> str | None:
 
 
 def main(argv: list[str]) -> int:
-    if len(argv) < 2 or argv[1] not in ("ledger", "api", "items", "changelog", "notes", "last"):
+    if len(argv) < 2 or argv[1] not in ("ledger", "api", "items", "changelog", "notes", "last", "pages"):
         print(__doc__)
         return 2
     if argv[1] == "items":
@@ -171,12 +195,25 @@ def main(argv: list[str]) -> int:
         parse = parse_changelog if argv[1] == "changelog" else parse_notes
         print(json.dumps(parse(Path(argv[2]).read_text(), since), indent=2))
         return 0
+    if argv[1] == "pages":
+        files = dict(a.split("=", 1) for a in argv[2:] if "=" in a)
+        if not files:
+            print(__doc__)
+            return 2
+        last = read_last()
+        report = page_report({n: Path(f).read_text() for n, f in files.items()}, last.get("pages", {}))
+        if "--write" in argv:
+            last["pages"] = {**last.get("pages", {}), **{n: r["hash"] for n, r in report.items()}}
+            last["sources"] = {**SOURCES, **PLAN_PAGES}
+            LAST.write_text(json.dumps(last, indent=1) + "\n")
+        print(json.dumps(report, indent=2))
+        return 0
     if argv[1] == "last":
         if "--write" in argv:
             last = read_last()
             last["claude_code"] = flag(argv, "--claude-code") or last.get("claude_code")
             last["notes"] = flag(argv, "--notes") or last.get("notes")
-            last["sources"] = SOURCES
+            last["sources"] = {**SOURCES, **PLAN_PAGES}
             LAST.write_text(json.dumps(last, indent=1) + "\n")
         print(json.dumps(read_last(), indent=2))
         return 0
