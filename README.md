@@ -101,7 +101,7 @@ Set your own line in the plugin options (`finishAtWeek`, `finishAtFiveHour`) or 
 
 ### Plan
 
-Set the `plan` option once (`free`, `pro`, `max5x`, `max20x`, `team`, `enterprise`, `api`); the host does not report it, so the plugin cannot detect it. Unset keeps the old behaviour (tier `max`, 70% / 85% / 90%). The plan supplies defaults; your `tier`, `finishAtWeek` and `finishAtFiveHour` options and prompt lines override them. The table is in `hooks/plans.ts` and the model is told its row at session start.
+The plugin reads the plan at session start from `claude auth status` (a subscription type or rate-limit tier; an API key or cloud provider reads as `api`; Max without a visible multiplier reads as `max5x`, the lower line). When that shows nothing, set the `plan` option once (`free`, `pro`, `max5x`, `max20x`, `team`, `enterprise`, `api`); the option always wins over detection. With neither, the old behaviour holds (tier `max`, 70% / 85% / 90%). The plan supplies defaults; your `tier`, `finishAtWeek` and `finishAtFiveHour` options and prompt lines override them. The table is in `hooks/plans.ts` and the model is told its row at session start.
 
 | Plan | Start tier | Agents at once | Opus agents | Check-in loops | Budget from (weekly) | Finish up (weekly / 5-hour) |
 | --- | --- | --- | --- | --- | --- | --- |

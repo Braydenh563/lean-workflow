@@ -1,6 +1,6 @@
 import { test, expect } from 'claude-code/testing'
 
-import { PLAN_DEFAULTS, PLANS_VERIFIED, planFrom, planNote } from './plans'
+import { PLAN_DEFAULTS, PLANS_VERIFIED, detectPlan, planFrom, planNote } from './plans'
 import { finishLine, tierFor, tierNote } from './tier'
 
 test('tier follows the weekly and 5-hour limits, and only ever rises from the configured tier', () => {
@@ -94,4 +94,18 @@ test('"15th" is not a 5-hour window', () => {
 
 test('a user finish line below the budget line is the budget line too', () => {
   expect(tierFor({ week: 65, finishWeek: 60 }).reason).toContain('stop from 60%')
+})
+
+test('detectPlan reads the plan from auth status JSON and leaves the unknown to the option', () => {
+  const d = (o: object) => detectPlan(JSON.stringify(o))
+  expect(d({ subscriptionType: 'pro' })).toBe('pro')
+  expect(d({ subscriptionType: 'max', rateLimitTier: 'default_claude_max_20x' })).toBe('max20x')
+  expect(d({ subscriptionType: 'max' })).toBe('max5x')
+  expect(d({ subscriptionType: 'team' })).toBe('team')
+  expect(d({ subscriptionType: 'enterprise' })).toBe('enterprise')
+  expect(d({ authMethod: 'api_key', apiProvider: 'firstParty' })).toBe('api')
+  expect(d({ apiProvider: 'bedrock' })).toBe('api')
+  expect(d({ loggedIn: true, authMethod: 'oauth_token', apiProvider: 'firstParty' })).toBeUndefined()
+  expect(detectPlan('not json')).toBeUndefined()
+  expect(detectPlan('null')).toBeUndefined()
 })

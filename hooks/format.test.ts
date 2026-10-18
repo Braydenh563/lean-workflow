@@ -69,5 +69,6 @@ test('the limit bars use the plan\'s lines and show the points left', () => {
   expect(out).toContain('(in 2d 3h)')
   expect(out).toContain('5-hour  🟡')
   expect(out).toContain('plan max20x · tier max')
+  expect(out.split('\n')[0]).toBe('✦ LEAN WORKFLOW · plan max20x · tier max · week 72% · 5h 90% · ctx 1k')
   expect(dashText({ ...base, limits: { tier: 'stop', tierReason: 'r', weekTrend: 'w', lines: { stopWeek: 60 } } })).toContain('weekly  🔴')
 })

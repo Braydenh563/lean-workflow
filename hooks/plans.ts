@@ -46,3 +46,25 @@ export function planNote(plan: Plan | undefined, now?: number): string | undefin
   const stale = age > STALE_DAYS ? ` The plan table was last checked ${PLANS_VERIFIED} (${age} days ago): plan limits change, so trust the live bars over these lines and tell the user the table needs a check (upgrade-scan).` : ''
   return `Plan ${plan}: ${agents}; ${checkin}; ${limits}.${stale}`
 }
+
+// The plan from `claude auth status` JSON, where the host reports one: a subscription type or rate-limit tier,
+// or an API key / cloud provider. Anything it does not recognise is undefined, and the `plan` option decides.
+// Max without a visible multiplier is read as 5x, the lower line.
+export function detectPlan(statusJson: string): Plan | undefined {
+  let s: Record<string, unknown>
+  try {
+    s = JSON.parse(statusJson)
+  } catch {
+    return undefined
+  }
+  if (!s || typeof s !== 'object') return undefined
+  const text = ['subscriptionType', 'subscription_type', 'plan', 'rateLimitTier', 'rate_limit_tier'].map(k => String(s[k] ?? '')).join(' ').toLowerCase()
+  if (/enterprise/.test(text)) return 'enterprise'
+  if (/\bteam/.test(text)) return 'team'
+  if (/max/.test(text)) return /20x/.test(text) ? 'max20x' : 'max5x'
+  if (/\bpro\b/.test(text)) return 'pro'
+  if (/\bfree\b/.test(text)) return 'free'
+  const provider = String(s.apiProvider ?? s.api_provider ?? '')
+  if ((provider && provider !== 'firstParty') || /api.?key/i.test(String(s.authMethod ?? s.auth_method ?? ''))) return 'api'
+  return undefined
+}

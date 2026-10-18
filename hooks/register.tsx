@@ -10,7 +10,8 @@ import { DOC_EXT, textCopyPath, unattendedDeny } from './guards'
 import { modeFromPrompt, modeFromSkill, triageDeny } from './modes'
 import type { Mode } from './modes'
 import { inboxCount, parseOrder, planCounts, progressText } from './progress'
-import { PLAN_DEFAULTS, planFrom, planNote } from './plans'
+import type { Plan } from './plans'
+import { PLAN_DEFAULTS, detectPlan, planFrom, planNote } from './plans'
 import { finishLine, tierFor, tierNote } from './tier'
 import type { Tier } from './tier'
 
@@ -151,6 +152,8 @@ async function progress($: ProgressHost): Promise<string> {
 // Per-activation state the helpers share (the hooks module is loaded fresh on a reload, so this starts over then).
 const state = {
   tier: 'max' as Tier,
+  // The plan read from the host at session start; the `plan` option wins over it.
+  detected: undefined as Plan | undefined,
   autoBudget: false,
   opusAsked: false,
   tierNoteDue: undefined as string | undefined,
@@ -169,13 +172,16 @@ function proWeek(): number {
   // A user finish-up line below the plan's budget line pulls it down, as tierFor does.
   return Math.min(planDefaults()?.proWeek || 70, state.finishWeek ?? state.opts.finishWeek ?? Infinity)
 }
+function activePlan(): Plan | undefined {
+  return planFrom(state.opts.plan) ?? state.detected
+}
 function planDefaults() {
-  const p = planFrom(state.opts.plan)
+  const p = activePlan()
   return p ? PLAN_DEFAULTS[p] : undefined
 }
 
 function tierNow(s: Stats) {
-  return tierFor({ base: state.opts.base, plan: state.opts.plan, week: s.week, fiveHour: s.fiveHour, finishWeek: state.finishWeek ?? state.opts.finishWeek, finishFive: state.finishFive ?? state.opts.finishFive })
+  return tierFor({ base: state.opts.base, plan: activePlan(), week: s.week, fiveHour: s.fiveHour, finishWeek: state.finishWeek ?? state.opts.finishWeek, finishFive: state.finishFive ?? state.opts.finishFive })
 }
 type Coach = ReturnType<typeof makeCoach>
 
@@ -223,7 +229,7 @@ async function dashView($: ProgressHost & Store): Promise<string> {
       tierReason: tierNow(s).reason,
       mode: (await read($, modeA)) || undefined,
       weekTrend: weekTrend(history, s.week),
-      plan: planFrom(state.opts.plan),
+      plan: activePlan(),
       lines: { proWeek: proWeek(), stopWeek: state.finishWeek ?? state.opts.finishWeek ?? planDefaults()?.stopWeek, stopFive: state.finishFive ?? state.opts.finishFive ?? planDefaults()?.stopFive },
     },
   }) + '\n\n' + (await progress($))
@@ -307,6 +313,10 @@ export const register: Register = (on, options) => {
       inputSchema: { type: 'object', properties: { view: { type: 'string', enum: ['dash', 'progress', 'spend', 'coach', 'brief'] } }, required: ['view'] },
       isDeferred: false,
     }).catch(() => undefined)
+    if (!planFrom(state.opts.plan)) {
+      const r = await $.process.run(['claude', 'auth', 'status']).catch(() => undefined)
+      state.detected = r && r.exitCode === 0 ? detectPlan(r.stdout) : undefined
+    }
     const text = await briefView($ as unknown as ProgressHost & Store, false).catch(() => undefined)
     if (text) $.ui.toast(text)
     return next(e)
@@ -588,7 +598,7 @@ export const register: Register = (on, options) => {
 
   on('prompt.compose', async ($, e, next) => {
     const r = await next(e)
-    return { ...r, sections: [...r.sections, { id: 'lean-workflow-autopilot', text: [AUTOPILOT, planNote(planFrom(state.opts.plan), state.opts.plan ? await Promise.resolve().then(() => $.clock.now()).catch(() => undefined) : undefined)].filter(Boolean).join('\n'), scope: 'shared' as const }] }
+    return { ...r, sections: [...r.sections, { id: 'lean-workflow-autopilot', text: [AUTOPILOT, planNote(activePlan(), activePlan() ? await Promise.resolve().then(() => $.clock.now()).catch(() => undefined) : undefined)].filter(Boolean).join('\n'), scope: 'shared' as const }] }
   }).catch(($, e, next) => next(e))
 
 

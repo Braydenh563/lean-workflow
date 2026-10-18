@@ -81,7 +81,7 @@ export function dashText(d: DashInput): string {
   const costs = d.costs.map(c => `  ${bar(c.share, 12)} ${pct(c.share)}  ${c.model.replace(/^claude-/, '')} · ${c.turns} turns · out ${k(c.out)}`)
   const split = (['reads', 'writes', 'output'] as const).map(key => `${key} ${bar(d.split[key], 6)} ${pct(d.split[key])}`)
   return [
-    '✦ LEAN WORKFLOW · session',
+    `✦ LEAN WORKFLOW · ${[d.limits.plan && `plan ${d.limits.plan}`, `tier ${d.limits.tier}`, s.week !== undefined && `week ${s.week}%`, s.fiveHour !== undefined && `5h ${s.fiveHour}%`, `ctx ${k(s.ctx)}`].filter(Boolean).join(' · ')}`,
     '',
     rule('Context per turn'),
     `  ${level} ${bar(s.ctx / (d.bigContext * 4 / 3))} ${k(s.ctx)} of ${k(d.bigContext)} budget`,
