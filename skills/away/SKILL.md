@@ -49,8 +49,8 @@ rules, record the choice, and carry on. Stop only on the conditions below.
 
 ## Stop rules (check `/spend` figures each item)
 
-- Weekly limit 70% or more: pro habits (one agent, no Opus, targeted tests).
-- Weekly limit 85% or more (or the user's own finish-up line), or the 5-hour
+- Weekly limit at the plan's budget line (70% by default): pro habits (one agent, no Opus, targeted tests).
+- Weekly limit at the plan's stop line (85% by default) or the user's own finish-up line, or the 5-hour
   window 90% or more: finish the step, push, stop. The plugin marks the work
   order `stopped (usage)`.
 - 60 minutes with no commit: the Stop hook ends the run.

@@ -99,6 +99,24 @@ The plugin reads your live limits from the host every turn. The tier follows the
 
 Set your own line in the plugin options (`finishAtWeek`, `finishAtFiveHour`) or in a prompt: "finish up at 60% weekly" or "once I get to 60% weekly usage, finish up". The model is told the line and the current figure, told again when it is within 5 points, and at the line it finishes the step, commits, pushes and stops. The `tier` option (`max` or `pro`) sets the floor.
 
+### Plan
+
+Set the `plan` option once (`free`, `pro`, `max5x`, `max20x`, `team`, `enterprise`, `api`); the host does not report it, so the plugin cannot detect it. Unset keeps the old behaviour (tier `max`, 70% / 85% / 90%). The plan supplies defaults; your `tier`, `finishAtWeek` and `finishAtFiveHour` options and prompt lines override them. The table is in `hooks/plans.ts` and the model is told its row at session start.
+
+| Plan | Start tier | Agents at once | Opus agents | Check-in loops | Budget from (weekly) | Finish up (weekly / 5-hour) |
+| --- | --- | --- | --- | --- | --- | --- |
+| `free` | pro | 1 | no | none | 50% | 80% / 80% |
+| `pro` | pro | 1 | no | none | 70% | 85% / 90% |
+| `max5x` | max | 2 | one | every 50 min at most | 70% | 85% / 90% |
+| `max20x` | max | 3 | one | every 30 min at most | 75% | 90% / 95% |
+| `team`, `enterprise` | max | 2 | one | every 50 min at most | 70% | 85% / 90% |
+| `api` | max | 3 | one | none | none (no windows) | none (set your own) |
+
+What is documented, and what is this plugin's judgement:
+
+- Documented: Pro and Max have a five-hour session limit and a weekly limit, shared by Claude and Claude Code; Max adds a separate weekly limit for Fable; usage credits can continue past a limit; `/usage` shows the bars ([Use Claude Code with your Pro or Max plan](https://support.claude.com/en/articles/11145838-use-claude-code-with-your-pro-or-max-plan)). Team and Enterprise seats draw from a per-seat allowance on a rolling five-hour and a weekly window, Standard or Premium seat, shared with chat ([Manage costs effectively](https://code.claude.com/docs/en/costs); [Claude Code with Team or Enterprise](https://support.claude.com/en/articles/11845131-use-claude-code-with-your-team-or-enterprise-plan)). API and cloud-provider use is billed per token with no plan windows ([Manage costs effectively](https://code.claude.com/docs/en/costs); [pricing](https://claude.com/pricing)). Check-in loops and idle goal check-ins resend the whole context each time, and the prompt cache lasts an hour on a subscription but five minutes on an API key ([Manage costs effectively](https://code.claude.com/docs/en/costs#why-usage-climbs-in-a-long-session)). Claude Code is part of Pro and Max, not Free ([Pro or Max plan article](https://support.claude.com/en/articles/11145838-use-claude-code-with-your-pro-or-max-plan)).
+- Not documented: Anthropic publishes no per-plan token or message counts, so the agent caps, percentages and cadences above are conservative defaults, scaled by the 5x / 20x multiples, not Anthropic figures. Premium Team seats hold more than Standard; use `max5x` lines or your own `finishAt*` if yours does. Read your own bars in `/usage` and `/dash`, and adjust.
+
 ### Commands
 
 | Command | Shows |
@@ -164,7 +182,8 @@ Set under the plugin's options.
 | `claudeMdMaxLines` | 200 | Warn when `CLAUDE.md` is read whole or written past this |
 | `nowMaxLines` | 60 | Same for `.claude/now.md` |
 | `coachOff` | empty | Comma-separated habits the coach should not count or show, e.g. `bigImage, idleGap` |
-| `tier` | `max` | `max` or `pro`; the live limits raise it on their own |
+| `plan` | empty | `free`, `pro`, `max5x`, `max20x`, `team`, `enterprise` or `api`; sets the defaults in the plan table |
+| `tier` | plan's, else `max` | `max` or `pro`; the live limits raise it on their own |
 | `finishAtWeek` | 85 | Weekly % at which the model is told to finish up, push and stop |
 | `finishAtFiveHour` | 90 | Same for the 5-hour window |
 
@@ -193,7 +212,7 @@ python -m pytest tests     # template tests, in a scratch repo
 
 Releases: raise `version` in `.claude-plugin/plugin.json` (and the README badge) in the PR. When it merges to main, the `Tag release` workflow runs `scripts/tag.sh --push`, which tags the commit that set the version as `lean-workflow--vX.Y.Z` (annotated; an existing tag is never moved). To tag or re-tag a version yourself, open Actions, pick **Tag release**, press **Run workflow**, type the version (for example `1.7.0`) and run it; it tags that version's commit and creates the GitHub release page (untick *release* for the tag alone, tick *backfill* to tag every earlier version without a tag). The version must already be in `plugin.json` on main. By hand: `scripts/tag.sh --version 1.7.0 --push`, or `scripts/tag.sh --push`, or `scripts/tag.sh --all --push` to backfill every earlier version found in the history. A GitHub release page is still yours to create from the tag. **One-time setup for the workflow:** GitHub will not let the default workflow token create a tag whose commit's history changes a file under `.github/workflows` (which is most releases of this repo), so the run fails with "refusing to allow a GitHub App to create or update workflow ... without `workflows` permission". Create a fine-grained personal access token (GitHub, Settings, Developer settings, Fine-grained tokens) for this repository only, with **Contents: read and write** and **Workflows: read and write**, and save it as a repository secret named `TAG_TOKEN` (repository Settings, Secrets and variables, Actions). The workflow uses it when present and falls back to the default token otherwise. Without it, tag from your own checkout: `git tag -a lean-workflow--vX.Y.Z -m "lean-workflow X.Y.Z" <commit>` then `git push origin lean-workflow--vX.Y.Z`.
 
-Layout: `hooks/` (guards and commands in `register.tsx`; pure rules in `coach.ts`, `tier.ts`, `modes.ts`, `guards.ts`, `briefing.ts`, `progress.ts`; formatting in `format.ts`), `skills/` (`lean-setup` with `templates/`, `retro`, `upgrade-scan`, `work`, `away`, and the modes `focus`, `triage`, `review`, `budget`, `release`), `scripts/` (`keep-going.sh`, `item_ledger.py`), `agents/`, `.claude-plugin/` (manifests).
+Layout: `hooks/` (guards and commands in `register.tsx`; pure rules in `coach.ts`, `tier.ts`, `plans.ts`, `modes.ts`, `guards.ts`, `briefing.ts`, `progress.ts`; formatting in `format.ts`), `skills/` (`lean-setup` with `templates/`, `retro`, `upgrade-scan`, `work`, `away`, and the modes `focus`, `triage`, `review`, `budget`, `release`), `scripts/` (`keep-going.sh`, `item_ledger.py`), `agents/`, `.claude-plugin/` (manifests).
 
 ## Licence
 

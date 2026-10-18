@@ -22,7 +22,7 @@ description: Set up the lean, self-improving workflow in the current repo, once 
 ```markdown
 ## Lean workflow
 
-Tier: `max` (set `pro` on the Pro plan). Fast checks: [the repo's commands].
+Plan: [free, pro, max5x, max20x, team, enterprise or api]; tier `max` (`pro` on Free and Pro). Fast checks: [the repo's commands].
 
 - Cost is turns times context. Batch independent tool calls; grep, then
   read line ranges (`wc -c` before a read; never `cat` several files in one
@@ -35,7 +35,8 @@ Tier: `max` (set `pro` on the Pro plan). Fast checks: [the repo's commands].
   Every agent call names its model.
 - Fable is opt-in only: nothing starts it unless the user names it for a
   task, and only for that task.
-- `max`: up to three agents at once, one Opus. `pro`: one agent, no Opus.
+- `max`: the plan's agent cap (max5x, team, enterprise: two; max20x, api: three), one Opus. `pro`: one agent, no Opus.
+- Check-in loops: none on Free, Pro and API (wait on PR events or do the next item); every 50 minutes at most on Max 5x, Team and Enterprise; every 30 on Max 20x.
 - One retry per new hypothesis; the same call three times is a stop.
 - Risky or UI changes get an independent check: `reviewer`, `ux-auditor`,
   `blind-tester`. The builder does not grade its own work.

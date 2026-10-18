@@ -10,6 +10,7 @@ import { DOC_EXT, textCopyPath, unattendedDeny } from './guards'
 import { modeFromPrompt, modeFromSkill, triageDeny } from './modes'
 import type { Mode } from './modes'
 import { inboxCount, parseOrder, planCounts, progressText } from './progress'
+import { PLAN_DEFAULTS, planFrom, planNote } from './plans'
 import { finishLine, tierFor, tierNote } from './tier'
 import type { Tier } from './tier'
 
@@ -74,7 +75,7 @@ function advice(s: Stats, costs: Record<string, ModelCost>): string {
   const writes = all.reduce((a, c) => a + c.writes * W.writes, 0)
   const total = all.reduce((a, c) => a + weighted(c), 0) || 1
   const opus = Object.entries(costs).filter(([m]) => /opus/.test(m)).reduce((a, [, c]) => a + weighted(c), 0)
-  if (s.week !== undefined && s.week >= 70) return `Weekly limit at ${s.week}%${s.weekResets ? ` (resets ${s.weekResets})` : ''}: work as tier pro until it resets: one agent, Sonnet, no Opus, short sessions.`
+  if (s.week !== undefined && s.week >= proWeek()) return `Weekly limit at ${s.week}%${s.weekResets ? ` (resets ${s.weekResets})` : ''}: work as tier pro until it resets: one agent, Sonnet, no Opus, short sessions.`
   if (s.fiveHour !== undefined && s.fiveHour >= 80) return `5-hour window at ${s.fiveHour}%: commit and push now, finish the step, then start fresh after the reset.`
   if (s.ctx > BIG_CONTEXT) return `Context ${k(s.ctx)} per turn: update the HANDOVER "Now" line and compact now (/compact keep: current task, open items); the handover file keeps the state.`
   if (writes > 0.4 * total && s.turns > 3) return 'Cache writes are over 40% of cost: avoid gaps over an hour, model switches and idle check-ins.'
@@ -157,14 +158,23 @@ const state = {
   unattendedNow: false,
   docsRead: new Set<string>(),
   // The user's finish-up lines: the plugin options, replaced for a session by a line in a prompt ("finish up at 60% weekly").
-  opts: { base: undefined as string | undefined, finishWeek: undefined as number | undefined, finishFive: undefined as number | undefined },
+  opts: { base: undefined as string | undefined, plan: undefined as string | undefined, finishWeek: undefined as number | undefined, finishFive: undefined as number | undefined },
   finishWeek: undefined as number | undefined,
   finishFive: undefined as number | undefined,
   nearNoted: false,
 }
 
+// The weekly % where tier pro starts: the plan's, else the default 70.
+function proWeek(): number {
+  return planDefaults()?.proWeek || 70
+}
+function planDefaults() {
+  const p = planFrom(state.opts.plan)
+  return p ? PLAN_DEFAULTS[p] : undefined
+}
+
 function tierNow(s: Stats) {
-  return tierFor({ base: state.opts.base, week: s.week, fiveHour: s.fiveHour, finishWeek: state.finishWeek ?? state.opts.finishWeek, finishFive: state.finishFive ?? state.opts.finishFive })
+  return tierFor({ base: state.opts.base, plan: state.opts.plan, week: s.week, fiveHour: s.fiveHour, finishWeek: state.finishWeek ?? state.opts.finishWeek, finishFive: state.finishFive ?? state.opts.finishFive })
 }
 type Coach = ReturnType<typeof makeCoach>
 
@@ -260,11 +270,11 @@ async function handover(run: Run): Promise<string | undefined> {
 }
 
 export const register: Register = (on, options) => {
-  const opts = options as { coachOff?: string; grepOnly?: string; claudeMdMaxLines?: number | string; nowMaxLines?: number | string; tier?: string; finishAtWeek?: number | string; finishAtFiveHour?: number | string }
+  const opts = options as { coachOff?: string; grepOnly?: string; claudeMdMaxLines?: number | string; nowMaxLines?: number | string; tier?: string; plan?: string; finishAtWeek?: number | string; finishAtFiveHour?: number | string }
   const grepOnly = new RegExp(String(opts.grepOnly || DEFAULT_GREP_ONLY))
   const claudeMax = Number(opts.claudeMdMaxLines) || DEFAULT_CLAUDE_MD_MAX
   const nowMax = Number(opts.nowMaxLines) || DEFAULT_NOW_MAX
-  state.opts = { base: opts.tier, finishWeek: Number(opts.finishAtWeek) || undefined, finishFive: Number(opts.finishAtFiveHour) || undefined }
+  state.opts = { base: opts.tier, plan: opts.plan, finishWeek: Number(opts.finishAtWeek) || undefined, finishFive: Number(opts.finishAtFiveHour) || undefined }
   const sizeWarned = new Set<string>()
   let ctxNoted = false
   // A turn's usage sums every model request in it; each main-thread tool call adds one.
@@ -489,7 +499,7 @@ export const register: Register = (on, options) => {
     }
     const ran = await next(e)
     spawned += 1
-    const hint = coach.offer([fanOut(spawned), agentModel({ model: args.model, type: args.subagent_type, prompt: String((e as unknown as { prompt?: string }).prompt ?? '') })], 2)
+    const hint = coach.offer([fanOut(spawned, planDefaults()?.agents), agentModel({ model: args.model, type: args.subagent_type, prompt: String((e as unknown as { prompt?: string }).prompt ?? '') })], 2)
     // Appended to the conversation so the orchestrator sees it before its next Agent call.
     return hint.length && ran.deny === undefined ? { ...ran, context: [...(ran.context ?? []), ...hint.map(t => `${$.plugin.name}: ${t}`)] } : ran
   }).catch(($, e, next) => next(e))
@@ -575,7 +585,7 @@ export const register: Register = (on, options) => {
 
   on('prompt.compose', async ($, e, next) => {
     const r = await next(e)
-    return { ...r, sections: [...r.sections, { id: 'lean-workflow-autopilot', text: AUTOPILOT, scope: 'shared' as const }] }
+    return { ...r, sections: [...r.sections, { id: 'lean-workflow-autopilot', text: [AUTOPILOT, planNote(planFrom(state.opts.plan))].filter(Boolean).join('\n'), scope: 'shared' as const }] }
   }).catch(($, e, next) => next(e))
 
 

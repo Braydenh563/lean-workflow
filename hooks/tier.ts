@@ -1,17 +1,22 @@
+import { PLAN_DEFAULTS, planFrom } from './plans'
+
 // Tier from the weekly limit: pure rules, so the thresholds are tested without a session.
 // `max` is the repo's configured tier; `pro` (one agent, no Opus) and `stop` (finish the step, push) follow the live limits.
 export type Tier = 'max' | 'pro' | 'stop'
 export const TIER_LIMITS = { proWeek: 70, stopWeek: 85, stopFive: 90 }
 const RANK: Record<Tier, number> = { max: 0, pro: 1, stop: 2 }
 
-export type TierInput = { base?: string; week?: number; fiveHour?: number; finishWeek?: number; finishFive?: number }
+export type TierInput = { base?: string; plan?: string; week?: number; fiveHour?: number; finishWeek?: number; finishFive?: number }
 export type TierResult = { tier: Tier; reason: string }
 
 // The tier in force: the configured one, raised (never lowered) by the live limits. Unknown limits change nothing.
 export function tierFor(a: TierInput): TierResult {
-  const base: Tier = /^pro$/i.test(a.base ?? '') ? 'pro' : 'max'
+  // The plan's defaults sit under the user's own settings: the tier option, then the finish-up lines.
+  const plan = planFrom(a.plan)
+  const d = plan ? PLAN_DEFAULTS[plan] : undefined
+  const base: Tier = /^pro$/i.test(a.base ?? '') || (!/^max$/i.test(a.base ?? '') && d?.base === 'pro') ? 'pro' : 'max'
   let tier = base
-  let reason = base === 'pro' ? 'configured tier pro' : 'under every limit'
+  let reason = base === 'pro' ? (/^pro$/i.test(a.base ?? '') ? 'configured tier pro' : `plan ${plan}`) : 'under every limit'
   const raise = (to: Tier, why: string) => {
     if (RANK[to] > RANK[tier]) {
       tier = to
@@ -19,9 +24,11 @@ export function tierFor(a: TierInput): TierResult {
     }
   }
   // The user's own finish-up lines replace the defaults; pro starts no later than the finish line.
-  const stopWeek = a.finishWeek ?? TIER_LIMITS.stopWeek
-  const stopFive = a.finishFive ?? TIER_LIMITS.stopFive
-  const proWeek = Math.min(TIER_LIMITS.proWeek, stopWeek)
+  // A plan without windows (api) has none to cross; the user's own line still applies.
+  const windows = !plan || d?.stopWeek !== undefined
+  const stopWeek = a.finishWeek ?? (windows ? d?.stopWeek ?? TIER_LIMITS.stopWeek : Infinity)
+  const stopFive = a.finishFive ?? (windows ? d?.stopFive ?? TIER_LIMITS.stopFive : Infinity)
+  const proWeek = Math.min(windows ? d?.proWeek ?? TIER_LIMITS.proWeek : Infinity, stopWeek)
   if (a.week !== undefined && a.week >= proWeek) raise('pro', `weekly limit ${a.week}% (pro from ${proWeek}%)`)
   if (a.week !== undefined && a.week >= stopWeek) raise('stop', `weekly limit ${a.week}% (stop from ${stopWeek}%)`)
   if (a.fiveHour !== undefined && a.fiveHour >= stopFive) raise('stop', `5-hour window ${a.fiveHour}% (stop from ${stopFive}%)`)

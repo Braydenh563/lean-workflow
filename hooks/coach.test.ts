@@ -1,6 +1,6 @@
 import { test, expect } from 'claude-code/testing'
 
-import { bigImage, bigPaste, coachReport, idleGap, longPr, longSession, makeCoach, parseOff, weeklyLimit } from './coach'
+import { fanOut, bigImage, bigPaste, coachReport, idleGap, longPr, longSession, makeCoach, parseOff, weeklyLimit } from './coach'
 
 const HOUR = 3600_000
 const NOW = 1_800_000_000_000
@@ -216,4 +216,13 @@ test('/coach totals what the nudges flagged, as an estimate', async ($, on) => {
 test('parseOff keeps only real habits', () => {
   expect([...parseOff('bigPaste, nonsense ,IDLEGAP')].sort()).toEqual(['bigPaste', 'idleGap'])
   expect(parseOff(undefined).size).toBe(0)
+})
+
+test('fan-out follows the plan\'s agent cap: one agent allowed, so the second already nudges', () => {
+  expect(fanOut(3)).toBeUndefined()
+  expect(fanOut(2, 1)?.text).toContain('at most 1 builder with')
+  expect(fanOut(1, 1)).toBeUndefined()
+  expect(fanOut(3, 2)?.text).toContain('at most 2 builders')
+  expect(fanOut(3, 3)).toBeUndefined()
+  expect(fanOut(4, 3)?.habit).toBe('fanOut')
 })

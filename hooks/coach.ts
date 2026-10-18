@@ -144,13 +144,14 @@ export function reread(a: { path: string; count: number; chars?: number }): Nudg
 }
 
 // Many agents in one prompt: each pays to orient before it does anything.
-export function fanOut(spawned: number): Nudge | undefined {
-  if (spawned < LIMITS.fanOut) return undefined
+// `cap` is the plan's agents-at-once; without a plan the limit is the default.
+export function fanOut(spawned: number, cap?: number): Nudge | undefined {
+  if (spawned < (cap === undefined ? LIMITS.fanOut : Math.min(LIMITS.fanOut, cap + 1))) return undefined
   const save = (spawned - 2) * AGENT_START * W.writes
   return {
     habit: 'fanOut',
     save,
-    text: `${spawned} agents started in one prompt, each reading the repo from scratch. Cheaper: one haiku scout to locate the files, then at most two builders with the paths in their briefs; about ${k(save)} token-equivalents of start-up (estimate).`,
+    text: `${spawned} agents started in one prompt, each reading the repo from scratch. Cheaper: one haiku scout to locate the files, then at most ${Math.min(2, cap ?? 2)} builder${Math.min(2, cap ?? 2) === 1 ? '' : 's'} with the paths in their briefs; about ${k(save)} token-equivalents of start-up (estimate).`,
   }
 }
 

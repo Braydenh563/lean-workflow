@@ -5,14 +5,14 @@ description: Budget mode, for when usage is the limit. The plugin turns it on at
 
 # Budget mode
 
-Automatic at the weekly limit's 70% (the plugin says so, shows the tier in
+Automatic at the plan's budget line (70% weekly; Free 50%, Max 20x 75%; see the README plan table) (the plugin says so, shows the tier in
 the status line and `/dash`, and refuses Opus agents unless the user names
 Opus). It lifts by itself when the limit recovers. Say "exit budget mode" to
 leave it early; the Opus refusal stays until then or until you name Opus.
 
 1. Read the live figures once (`/dash`, or the plugin's view tool): weekly and
    5-hour percentages, when the week resets, and the finish-up line (default
-   85% weekly, 90% 5-hour; the user can set their own, e.g. "finish up at
+   85% weekly, 90% 5-hour, or the plan's lines; the user can set their own, e.g. "finish up at
    60% weekly").
 2. Work as the `pro` tier: one agent at a time, Haiku for lookup, Sonnet for
    the rest. No Opus, no Fable. No scan rotation, no `blind-tester`, no UI

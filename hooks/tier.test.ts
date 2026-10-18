@@ -1,5 +1,6 @@
 import { test, expect } from 'claude-code/testing'
 
+import { PLAN_DEFAULTS, planFrom, planNote } from './plans'
 import { finishLine, tierFor, tierNote } from './tier'
 
 test('tier follows the weekly and 5-hour limits, and only ever rises from the configured tier', () => {
@@ -39,4 +40,47 @@ test('finishLine reads the line the user sets in words, in either order', () => 
   expect(finishLine('finish at 100% coverage')).toBeUndefined()
   expect(finishLine('the weekly limit is on my mind')).toBeUndefined()
   expect(finishLine('finish up at 250% weekly')).toBeUndefined()
+})
+
+test('the plan sets the starting tier and the lines; the user\'s own settings override it', () => {
+  expect(tierFor({ plan: 'pro' })).toEqual({ tier: 'pro', reason: 'plan pro' })
+  expect(tierFor({ plan: 'free', week: 79 }).tier).toBe('pro')
+  expect(tierFor({ plan: 'free', week: 80 }).tier).toBe('stop')
+  expect(tierFor({ plan: 'max5x', week: 69 }).tier).toBe('max')
+  expect(tierFor({ plan: 'max5x', week: 85 }).tier).toBe('stop')
+  expect(tierFor({ plan: 'max20x', week: 74 }).tier).toBe('max')
+  expect(tierFor({ plan: 'max20x', week: 75 }).tier).toBe('pro')
+  expect(tierFor({ plan: 'max20x', week: 89 }).tier).toBe('pro')
+  expect(tierFor({ plan: 'max20x', week: 90 }).tier).toBe('stop')
+  expect(tierFor({ plan: 'max20x', fiveHour: 94 }).tier).toBe('max')
+  expect(tierFor({ plan: 'max20x', fiveHour: 95 }).tier).toBe('stop')
+  expect(tierFor({ plan: 'pro', base: 'max', week: 10 }).tier).toBe('max')
+  expect(tierFor({ plan: 'max20x', finishWeek: 60, week: 60 }).tier).toBe('stop')
+  expect(tierFor({ plan: 'bogus', week: 70 }).tier).toBe('pro')
+})
+
+test('a plan without windows (api) is never raised by the limits, but a user line still stops it', () => {
+  expect(tierFor({ plan: 'api', week: 99, fiveHour: 99 }).tier).toBe('max')
+  expect(tierFor({ plan: 'api', week: 60, finishWeek: 60 }).tier).toBe('stop')
+})
+
+test('planFrom reads the plan by name, with spaces, dashes and the bare "max"', () => {
+  expect(planFrom('Max 20x')).toBe('max20x')
+  expect(planFrom('max-5x')).toBe('max5x')
+  expect(planFrom('MAX')).toBe('max5x')
+  expect(planFrom('Enterprise')).toBe('enterprise')
+  expect(planFrom('plus')).toBeUndefined()
+  expect(planFrom(undefined)).toBeUndefined()
+})
+
+test('the plan table is consistent and the note names its figures', () => {
+  for (const d of Object.values(PLAN_DEFAULTS)) {
+    if (d.stopWeek !== undefined) expect(d.proWeek!).toBeLessThan(d.stopWeek)
+    if (d.base === 'pro') expect(d.agents).toBe(1)
+  }
+  expect(planNote(undefined)).toBeUndefined()
+  expect(planNote('pro')).toContain('one agent at a time')
+  expect(planNote('max20x')).toContain('up to 3 agents')
+  expect(planNote('max20x')).toContain('finish up at 90% weekly or 95%')
+  expect(planNote('api')).toContain('billed per token')
 })

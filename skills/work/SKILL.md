@@ -124,8 +124,8 @@ Claims about UI need a number from the running app.
 
 ## Stop rules (check `/spend` or usage after each item)
 
-- Weekly limit 70%+: one agent, no Opus, targeted tests only.
-- Weekly 85%+ or 5-hour window 90%+: finish the step, push,
+- Weekly limit at the plan's budget line (70% by default): one agent, no Opus, targeted tests only.
+- Weekly at the plan's stop line (85% default) or the 5-hour window's (90% default): finish the step, push,
   `status: stopped (usage)`.
 - An item failed twice with new evidence: mark it `[!]` with the evidence,
   move on. Three blocked items in a row: `status: blocked (<why>)`.
